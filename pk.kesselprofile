@@ -1,0 +1,10 @@
+# Kessel-Profil für pk
+# Erstellt: 2025-01-17
+# Neues Supabase-Projekt: zedhieyjlfhygsfxzbze
+
+USERNAME=pk
+SUPABASE_BACKEND_URL=https://jpmhwyjiuodsvjowddsm.supabase.co
+SUPABASE_VAULT_URL=https://zedhieyjlfhygsfxzbze.supabase.co
+SUPABASE_VAULT_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InplZGhpZXlqbGZoeWdzZnh6YnplIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzA2NTY4MCwiZXhwIjoyMDc4NjQxNjgwfQ._tR4IhLDdV5IQ5z5JhB1HRvGml7wVwmw-v3JCqKhYH8
+
+
