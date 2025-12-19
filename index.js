@@ -426,10 +426,10 @@ async function listSupabaseProjects(debugFn) {
 }
 
 // Erstelle neues Supabase-Projekt
-async function createSupabaseProject(projectName, organizationId) {
+async function createSupabaseProject(projectName, organizationId, dbPassword, region = "eu-central-1") {
   try {
     const output = execSync(
-      `supabase projects create ${projectName} --org-id ${organizationId} --json`,
+      `supabase projects create "${projectName}" --org-id ${organizationId} --db-password "${dbPassword}" --region ${region} --output json`,
       {
         encoding: "utf-8",
         stdio: "pipe",
@@ -1576,8 +1576,16 @@ program.action(async (projectNameArg, options) => {
     console.log(chalk.dim(`   Organisation: Kessel (${KESSEL_ORG_ID})`))
 
     try {
+      // Generiere sicheres Datenbank-Passwort (32 Zeichen)
+      const crypto = await import("crypto")
+      const dbPassword = crypto.randomBytes(24).toString("base64").replace(/[+/=]/g, "x")
+      
+      // Standard-Region: Frankfurt (EU)
+      const region = "eu-central-1"
+      console.log(chalk.dim(`   Region: ${region}`))
+      
       // Erstelle Projekt in der Kessel-Organisation
-      const createCommand = `supabase projects create ${newProjectAnswers.supabaseProjectName} --org-id ${KESSEL_ORG_ID} --json`
+      const createCommand = `supabase projects create "${newProjectAnswers.supabaseProjectName}" --org-id ${KESSEL_ORG_ID} --db-password "${dbPassword}" --region ${region} --output json`
 
       const output = execSync(createCommand, {
         encoding: "utf-8",
@@ -1586,16 +1594,18 @@ program.action(async (projectNameArg, options) => {
       const newProject = JSON.parse(output)
 
       console.log(chalk.green(`✓ Supabase-Projekt "${newProject.name}" erstellt`))
-      console.log(chalk.dim(`   Project Ref: ${newProject.project_ref}`))
+      console.log(chalk.dim(`   Project Ref: ${newProject.id || newProject.project_ref}`))
 
-      appSupabaseUrl = `https://${newProject.project_ref}.supabase.co`
+      // Project Ref kann "id" oder "project_ref" heißen je nach CLI-Version
+      const projectRef = newProject.id || newProject.project_ref || newProject.ref
+      appSupabaseUrl = `https://${projectRef}.supabase.co`
 
       // Versuche Anon Key automatisch abzurufen
       console.log(chalk.blue("🔑 Versuche Anon Key automatisch abzurufen..."))
       // Warte kurz, damit das Projekt vollständig initialisiert ist
       await new Promise((resolve) => setTimeout(resolve, 2000))
       
-      const autoAnonKey = await fetchAnonKeyFromSupabase(newProject.project_ref, debug)
+      const autoAnonKey = await fetchAnonKeyFromSupabase(projectRef, debug)
       
       if (autoAnonKey) {
         console.log(chalk.green("✓ Anon Key automatisch abgerufen"))
