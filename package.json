@@ -8,7 +8,9 @@
     "kessel": "./index.js"
   },
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node tests/test-project-creation.mjs",
+    "test:project": "node tests/test-project-creation.mjs"
   },
   "keywords": ["nextjs", "supabase", "shadcn", "cli", "boilerplate"],
   "author": "",
