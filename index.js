@@ -1336,7 +1336,19 @@ const BOILERPLATE_VERSION = getBoilerplateVersion()
 program
   .name("kessel")
   .description("CLI für die Kessel Boilerplate - Erstellt neue Next.js-Projekte mit Supabase & ShadCN UI")
-  .version(`CLI: v${CLI_VERSION}\nBoilerplate: v${BOILERPLATE_VERSION}`, "-V, --version", "Zeigt CLI und Boilerplate Version")
+  .configureOutput({
+    writeOut: (str) => process.stdout.write(str),
+    writeErr: (str) => process.stderr.write(str),
+  })
+
+// Version-Command als separates Subcommand (umgeht den Konflikt mit Commander's eingebautem --version)
+program
+  .command("version")
+  .description("Zeigt CLI und Boilerplate Version")
+  .action(() => {
+    console.log(`Kessel CLI: v${CLI_VERSION}`)
+    console.log(`Boilerplate: v${BOILERPLATE_VERSION}`)
+  })
 
 // ============================================================================
 // HAUPT-COMMAND (Projekt erstellen)
