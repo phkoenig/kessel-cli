@@ -92,12 +92,14 @@ kessel secrets get --env > secrets-backup.env
 ## Was das Tool macht
 
 1. **Pre-Checks** - GitHub CLI, Vercel CLI, Supabase CLI prüfen
-2. **Projekt-Setup** - Name, Supabase-Projekt auswählen/erstellen
+2. **Projekt-Setup** - Name, neues Supabase-Projekt in Kessel-Organisation erstellen
 3. **Template klonen** - von `phkoenig/kessel-boilerplate`
 4. **Credentials konfigurieren** - `.env` und `.env.local`
 5. **Git initialisieren** - Repository erstellen und verknüpfen
 6. **Dependencies installieren** - mit pnpm
 7. **Validierung** - Automatische Prüfung der Konfiguration
+
+> **Hinweis:** Jedes neue Projekt erhält ein eigenes Supabase-Projekt in der Kessel-Organisation. Dies stellt saubere Isolation zwischen Projekten sicher.
 
 ## Konfiguration
 
