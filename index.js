@@ -2402,7 +2402,7 @@ async function validateProject(projectPath, verbose, debug) {
     const requiredFiles = [
       "package.json",
       "tsconfig.json",
-      "tailwind.config.ts",
+      // Tailwind CSS v4 benötigt keine tailwind.config.ts mehr - Konfiguration in globals.css
       "README.md",
       ".cursor/mcp.json",
       ".cursor/rules/prohibitions.mdc",
