@@ -571,6 +571,67 @@ async function fetchAnonKeyFromSupabase(projectRef, debugFn) {
   }
 }
 
+async function fetchServiceRoleKeyFromSupabase(projectRef, debugFn) {
+  try {
+    // Versuche über Supabase CLI die API-Keys abzurufen
+    let output
+    try {
+      output = execSync(
+        `supabase projects api-keys --project-ref ${projectRef}`,
+        {
+          encoding: "utf-8",
+          stdio: ["pipe", "pipe", "pipe"],
+          shell: true,
+        }
+      )
+    } catch (execError) {
+      if (execError.stdout) {
+        output = execError.stdout.toString("utf-8")
+      } else if (execError.stderr) {
+        output = execError.stderr.toString("utf-8")
+      } else {
+        if (debugFn) {
+          debugFn(`⚠️  CLI-Fehler beim Abrufen von Service Role Key: ${execError.message}`)
+        }
+        return null
+      }
+    }
+    
+    if (debugFn) {
+      debugFn(`Service Role Key Output (${output.length} chars): ${output.substring(0, 300)}`)
+    }
+    
+    // Parse Tabellen-Format: service_role │ KEY VALUE
+    const lines = output.split("\n")
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.includes("service_role")) {
+        const parts = trimmed.split("│").map((p) => p.trim())
+        if (parts.length >= 2) {
+          const keyName = parts[0].toLowerCase()
+          const keyValue = parts[1]
+          if (keyName.includes("service_role") && keyValue && keyValue.length > 20) {
+            if (debugFn) {
+              debugFn(`✓ Service Role Key aus Tabelle gefunden: ${keyValue.substring(0, 20)}...`)
+            }
+            return keyValue
+          }
+        }
+      }
+    }
+    
+    if (debugFn) {
+      debugFn(`⚠️  Konnte Service Role Key nicht aus Tabellen-Format parsen`)
+    }
+    return null
+  } catch (error) {
+    if (debugFn) {
+      debugFn(`❌ Fehler beim Abrufen von Service Role Key: ${error.message}`)
+    }
+    return null
+  }
+}
+
 const config = loadConfig()
 
 program
@@ -1580,6 +1641,19 @@ program.action(async (projectNameArg, options) => {
   } else {
     console.log(chalk.green("✓ Anon Key automatisch abgerufen"))
   }
+  
+  // Versuche Service Role Key vom Shared-Projekt abzurufen
+  console.log(chalk.blue("🔑 Rufe Service Role Key vom Shared-Projekt ab..."))
+  let appSupabaseServiceRoleKey = await fetchServiceRoleKeyFromSupabase(projectRef, debug)
+  
+  if (!appSupabaseServiceRoleKey) {
+    // Fallback: Verwende Vault Service Role Key (falls Shared-Projekt = Vault)
+    console.log(chalk.yellow("⚠️  Konnte Service Role Key nicht automatisch abrufen"))
+    console.log(chalk.dim("   → Verwende Vault Service Role Key als Fallback"))
+    appSupabaseServiceRoleKey = vaultServiceRoleKey
+  } else {
+    console.log(chalk.green("✓ Service Role Key automatisch abgerufen"))
+  }
 
   // 3. Dependencies-Installation
   updateProgress(progressBar, 30, "Dependencies-Installation konfigurieren...")
@@ -1908,7 +1982,7 @@ NEXT_PUBLIC_PROJECT_SCHEMA=${schemaName}
 
 # Service Role Key für Server-Side Operationen (User-Erstellung, etc.)
 # WICHTIG: Verwende den Vault Service Role Key für das Shared-Projekt
-SUPABASE_SERVICE_ROLE_KEY=${vaultServiceRoleKey}
+SUPABASE_SERVICE_ROLE_KEY=${appSupabaseServiceRoleKey}
 `
     fs.writeFileSync(path.join(projectPath, ".env.local"), envLocalContent)
     console.log(chalk.green("✓ .env.local erstellt (Shared Supabase URL + Schema-Name)"))
@@ -2386,9 +2460,10 @@ async function validateProject(projectPath, verbose, debug) {
       } else {
         results.errors.push(".env.local Datei fehlt erforderliche Variablen")
       }
-      // Prüfe dass SERVICE_ROLE_KEY NICHT in .env.local ist
-      if (envLocalContent.includes("SERVICE_ROLE_KEY")) {
+      // Prüfe dass SERVICE_ROLE_KEY NICHT in .env.local ist (SUPABASE_SERVICE_ROLE_KEY ist OK für Multi-Tenant)
+      if (envLocalContent.includes("SERVICE_ROLE_KEY=") && !envLocalContent.includes("SUPABASE_SERVICE_ROLE_KEY=")) {
         results.errors.push("KRITISCH: SERVICE_ROLE_KEY ist in .env.local! Das ist ein Sicherheitsrisiko!")
+        results.errors.push("   → Verwende SUPABASE_SERVICE_ROLE_KEY für Multi-Tenant Architektur")
       }
     } else {
       results.errors.push(".env.local Datei wurde nicht erstellt")
