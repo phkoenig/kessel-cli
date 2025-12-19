@@ -1546,9 +1546,8 @@ program.action(async (projectNameArg, options) => {
       name: "supabaseProjectChoice",
       message: "Wie möchtest du das Supabase-Projekt für die App verwenden?",
       choices: [
-        { name: "Bestehendes Projekt verwenden", value: "existing" },
-        { name: "Neues Projekt erstellen", value: "new" },
-        { name: "Manuell URL eingeben", value: "manual" },
+        { name: "Neues Projekt erstellen (empfohlen)", value: "new" },
+        { name: "Manuell URL eingeben (für bestehende Projekte)", value: "manual" },
       ],
     },
   ])
@@ -1556,80 +1555,11 @@ program.action(async (projectNameArg, options) => {
   let appSupabaseUrl = null
   let appSupabaseAnonKey = null
 
-  // Abhängig von der Wahl: Projekt auswählen, erstellen oder manuell eingeben
-  if (supabaseProjectChoice === "existing") {
-    // Liste bestehende Projekte auf
-    console.log(chalk.blue("\n📋 Lade bestehende Supabase-Projekte..."))
-    const projects = await listSupabaseProjects(debug)
+  // Kessel Organization ID (Standard für alle neuen Projekte)
+  const KESSEL_ORG_ID = "adzokxroqheoiqgwslfc"
 
-    if (projects.length === 0) {
-      console.log(chalk.yellow("⚠️  Keine Projekte gefunden oder Supabase CLI nicht authentifiziert."))
-      console.log(chalk.dim("   Tipp: Führe 'supabase login' aus, um dich zu authentifizieren."))
-      console.log(chalk.dim("   Oder wähle 'Manuell URL eingeben'.\n"))
-
-      // Fallback zu manueller Eingabe
-      const manualAnswers = await inquirer.prompt([
-        {
-          type: "input",
-          name: "appSupabaseUrl",
-          message: "Projekt-spezifische Supabase URL (für die App):",
-          validate: (input) => {
-            try {
-              new URL(input)
-              return true
-            } catch {
-              return "Bitte eine gültige URL eingeben."
-            }
-          },
-        },
-        {
-          type: "input",
-          name: "appSupabaseAnonKey",
-          message: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (vom projekt-spezifischen Projekt):",
-          validate: (input) => input.length > 0 || "Publishable Key ist erforderlich.",
-        },
-      ])
-      appSupabaseUrl = manualAnswers.appSupabaseUrl
-      appSupabaseAnonKey = manualAnswers.appSupabaseAnonKey
-    } else {
-      // Projekte zur Auswahl anbieten
-      const projectChoices = projects.map((p) => ({
-        name: `${p.name || p.id} (${p.project_ref || p.id})`,
-        value: p,
-      }))
-
-      const selectedProject = await inquirer.prompt([
-        {
-          type: "list",
-          name: "project",
-          message: "Wähle ein bestehendes Supabase-Projekt:",
-          choices: projectChoices,
-        },
-      ])
-
-      appSupabaseUrl = `https://${selectedProject.project.project_ref}.supabase.co`
-      
-      // Versuche Anon Key automatisch abzurufen
-      console.log(chalk.blue("🔑 Versuche Anon Key automatisch abzurufen..."))
-      const autoAnonKey = await fetchAnonKeyFromSupabase(selectedProject.project.project_ref, debug)
-      
-      if (autoAnonKey) {
-        console.log(chalk.green("✓ Anon Key automatisch abgerufen"))
-        appSupabaseAnonKey = autoAnonKey
-      } else {
-        // Fallback zu manueller Eingabe
-        const keyAnswer = await inquirer.prompt([
-          {
-            type: "input",
-            name: "appSupabaseAnonKey",
-            message: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (vom ausgewählten Projekt):",
-            validate: (input) => input.length > 0 || "Publishable Key ist erforderlich.",
-          },
-        ])
-        appSupabaseAnonKey = keyAnswer.appSupabaseAnonKey
-      }
-    }
-  } else if (supabaseProjectChoice === "new") {
+  // Abhängig von der Wahl: Neues Projekt erstellen oder manuell eingeben
+  if (supabaseProjectChoice === "new") {
     // Neues Projekt erstellen
     console.log(chalk.blue("\n🚀 Erstelle neues Supabase-Projekt..."))
 
@@ -1641,20 +1571,13 @@ program.action(async (projectNameArg, options) => {
         default: projectName,
         validate: (input) => input.length > 0 || "Projektname ist erforderlich.",
       },
-      {
-        type: "input",
-        name: "organizationId",
-        message: "Organization ID (optional, wird automatisch erkannt falls leer):",
-        default: "",
-      },
     ])
 
+    console.log(chalk.dim(`   Organisation: Kessel (${KESSEL_ORG_ID})`))
+
     try {
-      // Versuche Projekt zu erstellen
-      const orgId = newProjectAnswers.organizationId || undefined
-      const createCommand = orgId
-        ? `supabase projects create ${newProjectAnswers.supabaseProjectName} --org-id ${orgId} --json`
-        : `supabase projects create ${newProjectAnswers.supabaseProjectName} --json`
+      // Erstelle Projekt in der Kessel-Organisation
+      const createCommand = `supabase projects create ${newProjectAnswers.supabaseProjectName} --org-id ${KESSEL_ORG_ID} --json`
 
       const output = execSync(createCommand, {
         encoding: "utf-8",
