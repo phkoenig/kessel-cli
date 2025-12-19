@@ -2094,7 +2094,8 @@ SUPABASE_SERVICE_ROLE_KEY=${appSupabaseServiceRoleKey}
         const env = {
           ...process.env,
           NEXT_PUBLIC_SUPABASE_URL: appSupabaseUrl,
-          SERVICE_ROLE_KEY: vaultServiceRoleKey,
+          SERVICE_ROLE_KEY: appSupabaseServiceRoleKey, // Verwende Service Role Key vom Shared-Projekt
+          SUPABASE_SERVICE_ROLE_KEY: appSupabaseServiceRoleKey, // Auch als SUPABASE_SERVICE_ROLE_KEY für Scripts
           NEXT_PUBLIC_PROJECT_SCHEMA: schemaName,
         }
         
