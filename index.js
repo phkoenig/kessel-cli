@@ -1806,7 +1806,7 @@ program.action(async (projectNameArg, options) => {
     
     // 1. GitHub Repository Erstellung
     updateProgress(progressBar, 40, "Erstelle GitHub Repository...")
-    console.log(chalk.blue("\n1/6: Erstelle GitHub Repository..."))
+    console.log(chalk.blue("\n1/11: Erstelle GitHub Repository..."))
     const octokit = new Octokit({ auth: githubToken })
 
     try {
@@ -1871,7 +1871,7 @@ program.action(async (projectNameArg, options) => {
     const templateRepo = config.defaultTemplateRepo
     const templateVersion = options.templateVersion || "main" // Standard: main (latest)
     
-    console.log(chalk.blue(`\n2/6: Klone Template von ${templateRepo}...`))
+    console.log(chalk.blue(`\n2/11: Klone Template von ${templateRepo}...`))
     if (templateVersion !== "main") {
       console.log(chalk.dim(`   Version: ${templateVersion}`))
     }
@@ -1951,7 +1951,7 @@ program.action(async (projectNameArg, options) => {
 
     // 3. Bootstrap-Umgebungsvariablen (.env für pull-env Skript)
     updateProgress(progressBar, 50, "Konfiguriere Bootstrap-Credentials...")
-    console.log(chalk.blue("\n3/6: Konfiguriere Bootstrap-Credentials (.env)..."))
+    console.log(chalk.blue("\n3/11: Konfiguriere Bootstrap-Credentials (.env)..."))
     console.log(chalk.dim("   → Zentrale Supabase URL für Vault-Zugriff"))
     const bootstrapEnvContent = `# Bootstrap-Credentials für Vault-Zugriff
 # WICHTIG: Dies ist die URL des ZENTRALEN Supabase-Projekts (für Secrets)
@@ -1963,7 +1963,7 @@ SERVICE_ROLE_KEY=${vaultServiceRoleKey}
 
     // 4. Public-Umgebungsvariablen (.env.local für Next.js)
     updateProgress(progressBar, 52, "Konfiguriere Public-Credentials...")
-    console.log(chalk.blue("\n4/6: Konfiguriere Public-Credentials (.env.local)..."))
+    console.log(chalk.blue("\n4/11: Konfiguriere Public-Credentials (.env.local)..."))
     console.log(chalk.dim("   → Projekt-spezifische Supabase URL für die App"))
     const envLocalContent = `# Public-Credentials für Next.js Client
 # WICHTIG: Dies ist die URL des PROJEKT-SPEZIFISCHEN Supabase-Projekts (für die App)
@@ -1975,7 +1975,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${appSupabaseAnonKey}
 
     // 5. Git initialisieren und Remote setzen
     updateProgress(progressBar, 54, "Initialisiere Git...")
-    console.log(chalk.blue("\n5/6: Initialisiere Git..."))
+    console.log(chalk.blue("\n5/11: Initialisiere Git..."))
     execSync("git init", { cwd: projectPath, stdio: "ignore" })
 
     const { data: userData } = await octokit.rest.users.getAuthenticated()
@@ -1992,29 +1992,33 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${appSupabaseAnonKey}
       updateProgress(progressBar, 56, "Installiere Abhängigkeiten...")
       const pmName = packageManager?.name || "pnpm"
       const installCmd = packageManager?.installCommand || "pnpm install"
-      console.log(chalk.blue(`\n6/7: Installiere Abhängigkeiten mit ${pmName}...`))
+      console.log(chalk.blue(`\n6/11: Installiere Abhängigkeiten mit ${pmName}...`))
       console.log(chalk.dim("(Das kann einige Minuten dauern...)\n"))
       execSync(installCmd, { cwd: projectPath, stdio: "inherit" })
       console.log(chalk.green("\n✓ Dependencies installiert"))
     } else {
-      console.log(chalk.yellow("\n6/7: Übersprungen (Dependencies nicht installiert)"))
+      console.log(chalk.yellow("\n6/11: Übersprungen (Dependencies nicht installiert)"))
     }
 
     // 7. Supabase Link (falls Projekt ausgewählt wurde)
+    let supabaseLinked = false
+    let projectRef = null
+    
     if (appSupabaseUrl && appSupabaseAnonKey) {
-      updateProgress(progressBar, 58, "Verlinke Supabase-Projekt...")
-      console.log(chalk.blue("\n7/7: Verlinke Supabase-Projekt..."))
+      updateProgress(progressBar, 55, "Verlinke Supabase-Projekt...")
+      console.log(chalk.blue("\n7/10: Verlinke Supabase-Projekt..."))
       try {
         // Extrahiere project_ref aus der URL (z.B. https://hehzflyabtarnxujbewh.supabase.co)
         const urlMatch = appSupabaseUrl.match(/https?:\/\/([^.]+)\.supabase\.co/)
         if (urlMatch && urlMatch[1]) {
-          const projectRef = urlMatch[1]
+          projectRef = urlMatch[1]
           // Führe supabase link aus
           execSync(`supabase link --project-ref ${projectRef}`, {
             cwd: projectPath,
             stdio: "pipe",
           })
           console.log(chalk.green(`✓ Supabase-Projekt verlinkt (${projectRef})`))
+          supabaseLinked = true
         } else {
           console.log(chalk.yellow("⚠️  Konnte project_ref nicht aus URL extrahieren, überspringe Link"))
         }
@@ -2024,12 +2028,81 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${appSupabaseAnonKey}
         debug(`Link Error: ${linkError.message}`)
       }
     } else {
-      console.log(chalk.yellow("\n7/7: Übersprungen (kein Supabase-Projekt ausgewählt)"))
+      console.log(chalk.yellow("\n7/10: Übersprungen (kein Supabase-Projekt ausgewählt)"))
     }
 
-    // 8. Vercel Link (optional)
-    updateProgress(progressBar, 59, "Verlinke Vercel-Projekt...")
-    console.log(chalk.blue("\n8/9: Verlinke Vercel-Projekt (optional)..."))
+    // 8. Datenbank-Migrationen anwenden (wenn neues Projekt erstellt wurde)
+    if (supabaseLinked && supabaseProjectChoice === "new") {
+      updateProgress(progressBar, 56, "Wende Datenbank-Migrationen an...")
+      console.log(chalk.blue("\n8/10: Wende Datenbank-Migrationen an..."))
+      console.log(chalk.dim("   → Erstelle Tabellen: roles, profiles, themes, bugs, features..."))
+      
+      try {
+        // Warte kurz, damit das Projekt vollständig bereit ist
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+        
+        // Führe supabase db push aus, um Migrationen anzuwenden
+        execSync("supabase db push", {
+          cwd: projectPath,
+          stdio: "pipe",
+          env: {
+            ...process.env,
+            SUPABASE_ACCESS_TOKEN: process.env.SUPABASE_ACCESS_TOKEN,
+          },
+        })
+        console.log(chalk.green("✓ Datenbank-Migrationen angewendet"))
+      } catch (migrationError) {
+        console.log(chalk.yellow("⚠️  Migrationen konnten nicht automatisch angewendet werden"))
+        debug(`Migration Error: ${migrationError.message}`)
+        console.log(chalk.dim("   → Führe manuell aus: supabase db push"))
+      }
+    } else if (!supabaseLinked) {
+      console.log(chalk.yellow("\n8/10: Übersprungen (Supabase nicht verlinkt)"))
+    } else {
+      console.log(chalk.dim("\n8/10: Übersprungen (bestehendes Projekt)"))
+    }
+
+    // 9. Standard-User anlegen (wenn neues Projekt erstellt wurde)
+    if (supabaseLinked && supabaseProjectChoice === "new" && installDeps) {
+      updateProgress(progressBar, 57, "Erstelle Standard-User...")
+      console.log(chalk.blue("\n9/10: Erstelle Standard-User..."))
+      console.log(chalk.dim("   → admin@local / admin"))
+      console.log(chalk.dim("   → user@local / user"))
+      
+      try {
+        // Warte kurz, damit die Migrationen vollständig angewendet sind
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        
+        // Führe das create-test-users Script aus
+        const createUsersScript = path.join(projectPath, "scripts/create-test-users.mjs")
+        if (fs.existsSync(createUsersScript)) {
+          execSync("node scripts/create-test-users.mjs", {
+            cwd: projectPath,
+            stdio: "pipe",
+          })
+          console.log(chalk.green("✓ Standard-User erstellt"))
+          console.log(chalk.dim("   Login: admin@local / admin (Admin-Rolle)"))
+          console.log(chalk.dim("   Login: user@local / user (User-Rolle)"))
+        } else {
+          console.log(chalk.yellow("⚠️  create-test-users.mjs nicht gefunden"))
+          debug(`Script nicht gefunden: ${createUsersScript}`)
+        }
+      } catch (userError) {
+        console.log(chalk.yellow("⚠️  User konnten nicht automatisch erstellt werden"))
+        debug(`User Creation Error: ${userError.message}`)
+        console.log(chalk.dim("   → Führe manuell aus: pnpm run setup:users"))
+      }
+    } else if (!supabaseLinked) {
+      console.log(chalk.yellow("\n9/10: Übersprungen (Supabase nicht verlinkt)"))
+    } else if (!installDeps) {
+      console.log(chalk.yellow("\n9/10: Übersprungen (Dependencies nicht installiert)"))
+    } else {
+      console.log(chalk.dim("\n9/10: Übersprungen (bestehendes Projekt)"))
+    }
+
+    // 10. Vercel Link (optional)
+    updateProgress(progressBar, 58, "Verlinke Vercel-Projekt...")
+    console.log(chalk.blue("\n10/11: Verlinke Vercel-Projekt (optional)..."))
     try {
       // Prüfe ob Vercel CLI verfügbar ist
       let vercelAvailable = false
@@ -2093,9 +2166,9 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${appSupabaseAnonKey}
     // PHASE 5: Validierung (60-80%)
     // ========================================================================
     
-    // 9. Automatische Validierung
+    // 11. Automatische Validierung
     updateProgress(progressBar, 60, "Validiere Projekt-Setup...")
-    console.log(chalk.blue("\n9/9: Validiere Projekt-Setup...\n"))
+    console.log(chalk.blue("\n11/11: Validiere Projekt-Setup...\n"))
     const validationResults = await validateProject(projectPath, verbose, debug)
 
     // Validierungs-Ergebnisse ausgeben

@@ -97,7 +97,21 @@ kessel secrets get --env > secrets-backup.env
 4. **Credentials konfigurieren** - `.env` und `.env.local`
 5. **Git initialisieren** - Repository erstellen und verknüpfen
 6. **Dependencies installieren** - mit pnpm
-7. **Validierung** - Automatische Prüfung der Konfiguration
+7. **Supabase Link** - Projekt mit Supabase verknüpfen
+8. **Datenbank-Migrationen** - Alle Tabellen automatisch erstellen
+9. **Standard-User anlegen** - Admin und User für sofortigen Zugriff
+10. **Vercel Link** - Optional Vercel-Projekt verknüpfen
+11. **Validierung** - Automatische Prüfung der Konfiguration
+
+### Standard-User (automatisch erstellt)
+
+| E-Mail | Passwort | Rolle |
+|--------|----------|-------|
+| `admin@local` | `admin` | Admin |
+| `user@local` | `user` | User |
+
+**⚠️ SICHERHEITSHINWEIS:** Diese Credentials sind nur für die Entwicklung gedacht!  
+In Production müssen diese User gelöscht oder die Passwörter geändert werden.
 
 > **Hinweis:** Jedes neue Projekt erhält ein eigenes Supabase-Projekt in der Kessel-Organisation. Dies stellt saubere Isolation zwischen Projekten sicher.
 
