@@ -1,7 +1,8 @@
 {
   "sharedSupabaseProject": {
     "url": "https://ufqlocxqizmiaozkashi.supabase.co",
-    "projectRef": "ufqlocxqizmiaozkashi"
+    "projectRef": "ufqlocxqizmiaozkashi",
+    "dbPassword": ""
   },
   "vaultSupabaseUrl": "https://zedhieyjlfhygsfxzbze.supabase.co",
   "defaultTemplateRepo": "phkoenig/kessel-boilerplate"

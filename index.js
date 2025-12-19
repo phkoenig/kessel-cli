@@ -2091,12 +2091,24 @@ SUPABASE_SERVICE_ROLE_KEY=${appSupabaseServiceRoleKey}
       
       if (fs.existsSync(migrationScript)) {
         // Setze Environment-Variablen für das Script
+        // DB-Password aus config.json oder ENV holen
+        const dbPassword = config.sharedSupabaseProject?.dbPassword || process.env.SUPABASE_DB_PASSWORD
+        
+        if (!dbPassword) {
+          console.log(chalk.yellow("⚠️  SUPABASE_DB_PASSWORD nicht gefunden"))
+          console.log(chalk.dim("   → Migrationen können nicht automatisch ausgeführt werden"))
+          console.log(chalk.dim("   → Setze SUPABASE_DB_PASSWORD in config.json oder als ENV-Variable"))
+          console.log(chalk.dim("   → Oder führe Migrationen manuell im Supabase Dashboard aus"))
+        }
+        
         const env = {
           ...process.env,
           NEXT_PUBLIC_SUPABASE_URL: appSupabaseUrl,
           SERVICE_ROLE_KEY: appSupabaseServiceRoleKey, // Verwende Service Role Key vom Shared-Projekt
           SUPABASE_SERVICE_ROLE_KEY: appSupabaseServiceRoleKey, // Auch als SUPABASE_SERVICE_ROLE_KEY für Scripts
           NEXT_PUBLIC_PROJECT_SCHEMA: schemaName,
+          SUPABASE_PROJECT_REF: projectRef,
+          SUPABASE_DB_PASSWORD: dbPassword, // DB-Password für direkte PostgreSQL-Verbindung
         }
         
         try {
