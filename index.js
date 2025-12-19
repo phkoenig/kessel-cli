@@ -1984,7 +1984,9 @@ NEXT_PUBLIC_PROJECT_SCHEMA=${schemaName}
 # WICHTIG: Verwende den Vault Service Role Key für das Shared-Projekt
 SUPABASE_SERVICE_ROLE_KEY=${appSupabaseServiceRoleKey}
 `
-    fs.writeFileSync(path.join(projectPath, ".env.local"), envLocalContent)
+    // Entferne ANSI Escape Codes (falls vorhanden) und schreibe .env.local
+    const cleanEnvLocalContent = envLocalContent.replace(/\x1b\[[0-9;]*m/g, '')
+    fs.writeFileSync(path.join(projectPath, ".env.local"), cleanEnvLocalContent)
     console.log(chalk.green("✓ .env.local erstellt (Shared Supabase URL + Schema-Name)"))
 
     // 4.5. Schema im Shared-Projekt erstellen (über Supabase CLI)
