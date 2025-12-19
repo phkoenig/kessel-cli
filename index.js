@@ -1773,13 +1773,30 @@ program.action(async (projectNameArg, options) => {
         process.exit(1)
       }
     } else {
-      // Verzeichnis existiert nur im aktuellen Verzeichnis - Fehler
-      console.error(
-        chalk.red.bold(`\n❌ Fehler: Das Verzeichnis "${projectName}" existiert bereits im aktuellen Verzeichnis!\n`)
-      )
-      console.log(chalk.yellow(`💡 Tipp: Wechsle in das Verzeichnis "${projectName}" und führe dort "kessel" aus.`))
-      console.log(chalk.dim(`   Oder erstelle das Projekt in einem anderen Verzeichnis.\n`))
-      process.exit(1)
+      // Verzeichnis existiert im aktuellen Verzeichnis - frage ob überschreiben
+      console.log(chalk.yellow(`\n⚠️  Das Verzeichnis "${projectName}" existiert bereits.`))
+      console.log(chalk.dim(`   Pfad: ${projectPath}`))
+      
+      const files = fs.readdirSync(projectPath).filter(f => f !== ".git" && f !== ".cursor" && f !== "node_modules")
+      if (files.length > 0) {
+        console.log(chalk.dim(`   Inhalt: ${files.length} Dateien/Ordner (ohne node_modules)`))
+      }
+      
+      const overwriteAnswer = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "overwrite",
+          message: "Möchtest du das Template in dieses Verzeichnis installieren? (Bestehende Dateien werden überschrieben, node_modules bleibt erhalten)",
+          default: false,
+        },
+      ])
+      
+      if (!overwriteAnswer.overwrite) {
+        console.log(chalk.red("Abgebrochen."))
+        process.exit(0)
+      }
+      
+      debug(`Überschreibe bestehendes Verzeichnis: ${projectPath}`)
     }
   }
   
@@ -1930,9 +1947,13 @@ program.action(async (projectNameArg, options) => {
         fs.rmSync(gitPath, { recursive: true, force: true })
       }
     } catch (gitError) {
-      // Fallback zu degit falls git clone fehlschlägt
-      debug(`Git clone Fehler: ${gitError.message}`)
-      console.log(chalk.yellow("⚠️  Git clone fehlgeschlagen, versuche degit..."))
+      // Fallback zu degit falls git clone fehlschlägt oder Verzeichnis nicht leer ist
+      debug(`Git clone übersprungen: ${gitError.message}`)
+      if (gitError.message === "Verzeichnis nicht leer") {
+        console.log(chalk.blue("📦 Verwende degit für bestehendes Verzeichnis..."))
+      } else {
+        console.log(chalk.yellow("⚠️  Git clone fehlgeschlagen, versuche degit..."))
+      }
       
       try {
         // Verwende degit mit Branch-Name (nicht Commit-Hash)
