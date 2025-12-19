@@ -38,7 +38,11 @@ function loadConfig() {
     }
   }
   return {
-    defaultSupabaseUrl: "https://zedhieyjlfhygsfxzbze.supabase.co",
+    sharedSupabaseProject: {
+      url: "https://ufqlocxqizmiaozkashi.supabase.co",
+      projectRef: "ufqlocxqizmiaozkashi",
+    },
+    vaultSupabaseUrl: "https://zedhieyjlfhygsfxzbze.supabase.co",
     defaultTemplateRepo: "phkoenig/kessel-boilerplate",
   }
 }
@@ -1537,145 +1541,44 @@ program.action(async (projectNameArg, options) => {
   const vaultServiceRoleKey = secretsSetup?.serviceRoleKey || autoServiceRoleKey
   const vaultSupabaseUrl = secretsSetup?.vaultUrl || config.defaultSupabaseUrl
 
-  // 2. Supabase Projekt auswählen/erstellen
-  updateProgress(progressBar, 25, "Supabase Projekt konfigurieren...")
+  // 2. Schema im Shared Supabase-Projekt erstellen
+  updateProgress(progressBar, 25, "Supabase Schema konfigurieren...")
   
-  const { supabaseProjectChoice } = await inquirer.prompt([
-    {
-      type: "list",
-      name: "supabaseProjectChoice",
-      message: "Wie möchtest du das Supabase-Projekt für die App verwenden?",
-      choices: [
-        { name: "Neues Projekt erstellen (empfohlen)", value: "new" },
-        { name: "Manuell URL eingeben (für bestehende Projekte)", value: "manual" },
-      ],
-    },
-  ])
-
-  let appSupabaseUrl = null
-  let appSupabaseAnonKey = null
-
-  // Kessel Organization ID (Standard für alle neuen Projekte)
-  const KESSEL_ORG_ID = "adzokxroqheoiqgwslfc"
-
-  // Abhängig von der Wahl: Neues Projekt erstellen oder manuell eingeben
-  if (supabaseProjectChoice === "new") {
-    // Neues Projekt erstellen
-    console.log(chalk.blue("\n🚀 Erstelle neues Supabase-Projekt..."))
-
-    const newProjectAnswers = await inquirer.prompt([
-      {
-        type: "input",
-        name: "supabaseProjectName",
-        message: "Name für das neue Supabase-Projekt:",
-        default: projectName,
-        validate: (input) => input.length > 0 || "Projektname ist erforderlich.",
-      },
-    ])
-
-    console.log(chalk.dim(`   Organisation: Kessel (${KESSEL_ORG_ID})`))
-
-    try {
-      // Generiere sicheres Datenbank-Passwort (32 Zeichen)
-      const crypto = await import("crypto")
-      const dbPassword = crypto.randomBytes(24).toString("base64").replace(/[+/=]/g, "x")
-      
-      // Standard-Region: Frankfurt (EU)
-      const region = "eu-central-1"
-      console.log(chalk.dim(`   Region: ${region}`))
-      
-      // Erstelle Projekt in der Kessel-Organisation
-      const createCommand = `supabase projects create "${newProjectAnswers.supabaseProjectName}" --org-id ${KESSEL_ORG_ID} --db-password "${dbPassword}" --region ${region} --output json`
-
-      const output = execSync(createCommand, {
-        encoding: "utf-8",
-        stdio: "pipe",
-      })
-      const newProject = JSON.parse(output)
-
-      console.log(chalk.green(`✓ Supabase-Projekt "${newProject.name}" erstellt`))
-      console.log(chalk.dim(`   Project Ref: ${newProject.id || newProject.project_ref}`))
-
-      // Project Ref kann "id" oder "project_ref" heißen je nach CLI-Version
-      const projectRef = newProject.id || newProject.project_ref || newProject.ref
-      appSupabaseUrl = `https://${projectRef}.supabase.co`
-
-      // Versuche Anon Key automatisch abzurufen
-      console.log(chalk.blue("🔑 Versuche Anon Key automatisch abzurufen..."))
-      // Warte kurz, damit das Projekt vollständig initialisiert ist
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-      
-      const autoAnonKey = await fetchAnonKeyFromSupabase(projectRef, debug)
-      
-      if (autoAnonKey) {
-        console.log(chalk.green("✓ Anon Key automatisch abgerufen"))
-        appSupabaseAnonKey = autoAnonKey
-      } else {
-        // Fallback zu manueller Eingabe
-        console.log(chalk.yellow("⚠️  Konnte Anon Key nicht automatisch abrufen, bitte manuell eingeben"))
-        const keyAnswer = await inquirer.prompt([
-          {
-            type: "input",
-            name: "appSupabaseAnonKey",
-            message: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (vom neuen Projekt):",
-            validate: (input) => input.length > 0 || "Publishable Key ist erforderlich.",
-          },
-        ])
-        appSupabaseAnonKey = keyAnswer.appSupabaseAnonKey
-      }
-    } catch (error) {
-      console.error(chalk.red(`❌ Fehler beim Erstellen des Supabase-Projekts: ${error.message}`))
-      console.log(chalk.yellow("⚠️  Fallback zu manueller Eingabe...\n"))
-
-      const manualAnswers = await inquirer.prompt([
-        {
-          type: "input",
-          name: "appSupabaseUrl",
-          message: "Projekt-spezifische Supabase URL (für die App):",
-          validate: (input) => {
-            try {
-              new URL(input)
-              return true
-            } catch {
-              return "Bitte eine gültige URL eingeben."
-            }
-          },
-        },
-        {
-          type: "input",
-          name: "appSupabaseAnonKey",
-          message: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (vom projekt-spezifischen Projekt):",
-          validate: (input) => input.length > 0 || "Publishable Key ist erforderlich.",
-        },
-      ])
-      appSupabaseUrl = manualAnswers.appSupabaseUrl
-      appSupabaseAnonKey = manualAnswers.appSupabaseAnonKey
-    }
-  } else {
-    // Manuelle Eingabe
-    const manualAnswers = await inquirer.prompt([
-      {
-        type: "input",
-        name: "appSupabaseUrl",
-        message: "Projekt-spezifische Supabase URL (für die App):",
-        validate: (input) => {
-          try {
-            new URL(input)
-            return true
-          } catch {
-            return "Bitte eine gültige URL eingeben."
-          }
-        },
-      },
+  console.log(chalk.blue("\n📊 Multi-Tenant Setup: Erstelle Schema im Shared-Projekt..."))
+  
+  // Lade Shared-Projekt-Konfiguration
+  const sharedProject = config.sharedSupabaseProject || {
+    url: "https://ufqlocxqizmiaozkashi.supabase.co",
+    projectRef: "ufqlocxqizmiaozkashi",
+  }
+  
+  const appSupabaseUrl = sharedProject.url
+  const projectRef = sharedProject.projectRef
+  
+  // Normalisiere Projektname für Schema (Postgres erlaubt keine Bindestriche in Schema-Namen)
+  const schemaName = projectName.replace(/-/g, "_").toLowerCase()
+  
+  console.log(chalk.dim(`   Shared-Projekt: ${projectRef}`))
+  console.log(chalk.dim(`   Schema-Name: ${schemaName}`))
+  
+  // Versuche Anon Key vom Shared-Projekt abzurufen
+  console.log(chalk.blue("🔑 Rufe Anon Key vom Shared-Projekt ab..."))
+  let appSupabaseAnonKey = await fetchAnonKeyFromSupabase(projectRef, debug)
+  
+  if (!appSupabaseAnonKey) {
+    // Fallback zu manueller Eingabe
+    console.log(chalk.yellow("⚠️  Konnte Anon Key nicht automatisch abrufen"))
+    const keyAnswer = await inquirer.prompt([
       {
         type: "input",
         name: "appSupabaseAnonKey",
-        message: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (vom projekt-spezifischen Projekt):",
+        message: `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (vom Shared-Projekt ${projectRef}):`,
         validate: (input) => input.length > 0 || "Publishable Key ist erforderlich.",
       },
     ])
-    appSupabaseUrl = manualAnswers.appSupabaseUrl
-    appSupabaseAnonKey = manualAnswers.appSupabaseAnonKey
+    appSupabaseAnonKey = keyAnswer.appSupabaseAnonKey
+  } else {
+    console.log(chalk.green("✓ Anon Key automatisch abgerufen"))
   }
 
   // 3. Dependencies-Installation
@@ -1995,14 +1898,53 @@ SERVICE_ROLE_KEY=${vaultServiceRoleKey}
     // 4. Public-Umgebungsvariablen (.env.local für Next.js)
     updateProgress(progressBar, 52, "Konfiguriere Public-Credentials...")
     console.log(chalk.blue("\n4/11: Konfiguriere Public-Credentials (.env.local)..."))
-    console.log(chalk.dim("   → Projekt-spezifische Supabase URL für die App"))
+    console.log(chalk.dim("   → Shared Supabase-Projekt + Schema-Name"))
     const envLocalContent = `# Public-Credentials für Next.js Client
-# WICHTIG: Dies ist die URL des PROJEKT-SPEZIFISCHEN Supabase-Projekts (für die App)
+# WICHTIG: Multi-Tenant Architektur - Alle Projekte teilen sich ein Supabase-Projekt
+# Jedes Projekt hat ein eigenes Schema für Daten-Isolation
 NEXT_PUBLIC_SUPABASE_URL=${appSupabaseUrl}
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${appSupabaseAnonKey}
+NEXT_PUBLIC_PROJECT_SCHEMA=${schemaName}
 `
     fs.writeFileSync(path.join(projectPath, ".env.local"), envLocalContent)
-    console.log(chalk.green("✓ .env.local erstellt (Projekt-spezifische Supabase URL + PUBLISHABLE_KEY)"))
+    console.log(chalk.green("✓ .env.local erstellt (Shared Supabase URL + Schema-Name)"))
+
+    // 4.5. Schema im Shared-Projekt erstellen
+    updateProgress(progressBar, 53, "Erstelle Schema im Shared-Projekt...")
+    console.log(chalk.blue("\n4.5/11: Erstelle Schema im Shared-Projekt..."))
+    console.log(chalk.dim(`   → Schema: ${schemaName}`))
+    
+    try {
+      // Erstelle Schema über Supabase CLI
+      const tempSchemaFile = path.join(projectPath, `.temp_schema_${Date.now()}.sql`)
+      fs.writeFileSync(tempSchemaFile, `CREATE SCHEMA IF NOT EXISTS "${schemaName}";`)
+      
+      try {
+        execSync(
+          `supabase db execute --file "${tempSchemaFile}" --project-ref ${projectRef}`,
+          {
+            stdio: "pipe",
+            cwd: projectPath,
+          }
+        )
+        console.log(chalk.green(`✓ Schema "${schemaName}" erstellt`))
+      } catch (sqlError) {
+        debug(`Supabase CLI Schema-Erstellung fehlgeschlagen: ${sqlError.message}`)
+        throw sqlError
+      } finally {
+        // Cleanup
+        try {
+          fs.unlinkSync(tempSchemaFile)
+        } catch {
+          // Ignoriere Cleanup-Fehler
+        }
+      }
+    } catch (schemaError) {
+      console.log(chalk.yellow(`⚠️  Schema-Erstellung fehlgeschlagen: ${schemaError.message}`))
+      console.log(chalk.dim("   → Schema muss manuell erstellt werden:"))
+      console.log(chalk.dim(`   CREATE SCHEMA IF NOT EXISTS "${schemaName}";`))
+      console.log(chalk.dim(`   Oder: supabase db execute --file schema.sql --project-ref ${projectRef}`))
+    }
 
     // 5. Git initialisieren und Remote setzen
     updateProgress(progressBar, 54, "Initialisiere Git...")
@@ -2031,104 +1973,131 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${appSupabaseAnonKey}
       console.log(chalk.yellow("\n6/11: Übersprungen (Dependencies nicht installiert)"))
     }
 
-    // 7. Supabase Link (falls Projekt ausgewählt wurde)
+    // 7. Supabase Link zum Shared-Projekt
     let supabaseLinked = false
-    let projectRef = null
     
     if (appSupabaseUrl && appSupabaseAnonKey) {
-      updateProgress(progressBar, 55, "Verlinke Supabase-Projekt...")
-      console.log(chalk.blue("\n7/10: Verlinke Supabase-Projekt..."))
+      updateProgress(progressBar, 55, "Verlinke Shared Supabase-Projekt...")
+      console.log(chalk.blue("\n7/11: Verlinke Shared Supabase-Projekt..."))
+      console.log(chalk.dim(`   → Project Ref: ${projectRef}`))
       try {
-        // Extrahiere project_ref aus der URL (z.B. https://hehzflyabtarnxujbewh.supabase.co)
-        const urlMatch = appSupabaseUrl.match(/https?:\/\/([^.]+)\.supabase\.co/)
-        if (urlMatch && urlMatch[1]) {
-          projectRef = urlMatch[1]
-          // Führe supabase link aus
-          execSync(`supabase link --project-ref ${projectRef}`, {
-            cwd: projectPath,
-            stdio: "pipe",
-          })
-          console.log(chalk.green(`✓ Supabase-Projekt verlinkt (${projectRef})`))
-          supabaseLinked = true
-        } else {
-          console.log(chalk.yellow("⚠️  Konnte project_ref nicht aus URL extrahieren, überspringe Link"))
-        }
+        // Führe supabase link aus (zum Shared-Projekt)
+        execSync(`supabase link --project-ref ${projectRef}`, {
+          cwd: projectPath,
+          stdio: "pipe",
+        })
+        console.log(chalk.green(`✓ Shared Supabase-Projekt verlinkt (${projectRef})`))
+        supabaseLinked = true
       } catch (linkError) {
         // Link-Fehler sind nicht kritisch - das Projekt funktioniert trotzdem
         console.log(chalk.yellow("⚠️  Supabase Link fehlgeschlagen (nicht kritisch)"))
         debug(`Link Error: ${linkError.message}`)
       }
     } else {
-      console.log(chalk.yellow("\n7/10: Übersprungen (kein Supabase-Projekt ausgewählt)"))
+      console.log(chalk.yellow("\n7/11: Übersprungen (kein Supabase-Projekt konfiguriert)"))
     }
 
-    // 8. Datenbank-Migrationen anwenden (wenn neues Projekt erstellt wurde)
-    if (supabaseLinked && supabaseProjectChoice === "new") {
-      updateProgress(progressBar, 56, "Wende Datenbank-Migrationen an...")
-      console.log(chalk.blue("\n8/10: Wende Datenbank-Migrationen an..."))
-      console.log(chalk.dim("   → Erstelle Tabellen: roles, profiles, themes, bugs, features..."))
+    // 8. Datenbank-Migrationen im Schema anwenden
+    updateProgress(progressBar, 56, "Wende Datenbank-Migrationen im Schema an...")
+    console.log(chalk.blue("\n8/11: Wende Datenbank-Migrationen an..."))
+    console.log(chalk.dim(`   → Schema: ${schemaName}`))
+    console.log(chalk.dim("   → Erstelle Tabellen: roles, profiles, themes, bugs, features..."))
+    
+    try {
+      // Warte kurz, damit das Schema vollständig erstellt ist
+      await new Promise((resolve) => setTimeout(resolve, 1000))
       
-      try {
-        // Warte kurz, damit das Projekt vollständig bereit ist
-        await new Promise((resolve) => setTimeout(resolve, 3000))
+      // Verwende das Migration-Script aus der Boilerplate
+      const migrationScript = path.join(projectPath, "scripts", "apply-migrations-to-schema.mjs")
+      
+      if (fs.existsSync(migrationScript)) {
+        // Setze Environment-Variablen für das Script
+        const env = {
+          ...process.env,
+          NEXT_PUBLIC_SUPABASE_URL: appSupabaseUrl,
+          SERVICE_ROLE_KEY: vaultServiceRoleKey,
+          NEXT_PUBLIC_PROJECT_SCHEMA: schemaName,
+        }
         
-        // Führe supabase db push aus, um Migrationen anzuwenden
-        execSync("supabase db push", {
-          cwd: projectPath,
-          stdio: "pipe",
-          env: {
-            ...process.env,
-            SUPABASE_ACCESS_TOKEN: process.env.SUPABASE_ACCESS_TOKEN,
-          },
-        })
-        console.log(chalk.green("✓ Datenbank-Migrationen angewendet"))
-      } catch (migrationError) {
-        console.log(chalk.yellow("⚠️  Migrationen konnten nicht automatisch angewendet werden"))
-        debug(`Migration Error: ${migrationError.message}`)
-        console.log(chalk.dim("   → Führe manuell aus: supabase db push"))
+        try {
+          execSync(`node scripts/apply-migrations-to-schema.mjs ${schemaName}`, {
+            cwd: projectPath,
+            stdio: "inherit",
+            env: env,
+          })
+          console.log(chalk.green("✓ Datenbank-Migrationen im Schema angewendet"))
+        } catch (migrationError) {
+          console.log(chalk.yellow("⚠️  Migrationen konnten nicht automatisch angewendet werden"))
+          debug(`Migration Error: ${migrationError.message}`)
+          console.log(chalk.dim(`   → Führe manuell aus: node scripts/apply-migrations-to-schema.mjs ${schemaName}`))
+        }
+      } else {
+        console.log(chalk.yellow("⚠️  Migration-Script nicht gefunden"))
+        console.log(chalk.dim(`   → Erstelle Schema manuell: CREATE SCHEMA "${schemaName}";`))
       }
-    } else if (!supabaseLinked) {
-      console.log(chalk.yellow("\n8/10: Übersprungen (Supabase nicht verlinkt)"))
-    } else {
-      console.log(chalk.dim("\n8/10: Übersprungen (bestehendes Projekt)"))
+    } catch (migrationError) {
+      console.log(chalk.yellow("⚠️  Migrationen konnten nicht automatisch angewendet werden"))
+      debug(`Migration Error: ${migrationError.message}`)
+      console.log(chalk.dim(`   → Führe manuell aus: CREATE SCHEMA "${schemaName}"; dann Migrationen`))
     }
 
-    // 9. Standard-User anlegen (wenn neues Projekt erstellt wurde)
-    if (supabaseLinked && supabaseProjectChoice === "new" && installDeps) {
-      updateProgress(progressBar, 57, "Erstelle Standard-User...")
-      console.log(chalk.blue("\n9/10: Erstelle Standard-User..."))
-      console.log(chalk.dim("   → admin@local / admin"))
-      console.log(chalk.dim("   → user@local / user"))
+    // 9. Standard-User anlegen (Shared Auth - nur einmal, falls nicht existiert)
+    if (supabaseLinked && installDeps) {
+      updateProgress(progressBar, 57, "Prüfe Standard-User...")
+      console.log(chalk.blue("\n9/11: Prüfe Standard-User (Shared Auth)..."))
+      console.log(chalk.dim("   → admin@local / admin (wird nur einmal erstellt)"))
+      console.log(chalk.dim("   → user@local / user (wird nur einmal erstellt)"))
       
       try {
         // Warte kurz, damit die Migrationen vollständig angewendet sind
         await new Promise((resolve) => setTimeout(resolve, 2000))
         
-        // Führe das create-test-users Script aus
-        const createUsersScript = path.join(projectPath, "scripts/create-test-users.mjs")
-        if (fs.existsSync(createUsersScript)) {
-          execSync("node scripts/create-test-users.mjs", {
-            cwd: projectPath,
-            stdio: "pipe",
-          })
-          console.log(chalk.green("✓ Standard-User erstellt"))
-          console.log(chalk.dim("   Login: admin@local / admin (Admin-Rolle)"))
-          console.log(chalk.dim("   Login: user@local / user (User-Rolle)"))
+        // Erstelle Supabase Client für User-Check
+        const { createClient: createSupabaseClient } = await import("@supabase/supabase-js")
+        const supabaseAdmin = createSupabaseClient(
+          appSupabaseUrl,
+          vaultServiceRoleKey,
+          {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false,
+            },
+          }
+        )
+        
+        // Prüfe ob Standard-User bereits existieren
+        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
+        const adminExists = existingUsers?.users?.some(u => u.email === "admin@local")
+        const userExists = existingUsers?.users?.some(u => u.email === "user@local")
+        
+        if (adminExists && userExists) {
+          console.log(chalk.green("✓ Standard-User existieren bereits (Shared Auth)"))
         } else {
-          console.log(chalk.yellow("⚠️  create-test-users.mjs nicht gefunden"))
-          debug(`Script nicht gefunden: ${createUsersScript}`)
+          // Führe das create-test-users Script aus (erstellt nur fehlende User)
+          const createUsersScript = path.join(projectPath, "scripts/create-test-users.mjs")
+          if (fs.existsSync(createUsersScript)) {
+            execSync("node scripts/create-test-users.mjs", {
+              cwd: projectPath,
+              stdio: "pipe",
+            })
+            console.log(chalk.green("✓ Standard-User erstellt/aktualisiert"))
+          } else {
+            console.log(chalk.yellow("⚠️  create-test-users.mjs nicht gefunden"))
+            debug(`Script nicht gefunden: ${createUsersScript}`)
+          }
         }
+        
+        console.log(chalk.dim("   Login: admin@local / admin (Admin-Rolle)"))
+        console.log(chalk.dim("   Login: user@local / user (User-Rolle)"))
       } catch (userError) {
-        console.log(chalk.yellow("⚠️  User konnten nicht automatisch erstellt werden"))
-        debug(`User Creation Error: ${userError.message}`)
+        console.log(chalk.yellow("⚠️  User-Check konnte nicht durchgeführt werden"))
+        debug(`User Check Error: ${userError.message}`)
         console.log(chalk.dim("   → Führe manuell aus: pnpm run setup:users"))
       }
     } else if (!supabaseLinked) {
-      console.log(chalk.yellow("\n9/10: Übersprungen (Supabase nicht verlinkt)"))
+      console.log(chalk.yellow("\n9/11: Übersprungen (Supabase nicht verlinkt)"))
     } else if (!installDeps) {
-      console.log(chalk.yellow("\n9/10: Übersprungen (Dependencies nicht installiert)"))
-    } else {
-      console.log(chalk.dim("\n9/10: Übersprungen (bestehendes Projekt)"))
+      console.log(chalk.yellow("\n9/11: Übersprungen (Dependencies nicht installiert)"))
     }
 
     // 10. Vercel Link (optional)

@@ -92,18 +92,31 @@ kessel secrets get --env > secrets-backup.env
 ## Was das Tool macht
 
 1. **Pre-Checks** - GitHub CLI, Vercel CLI, Supabase CLI prüfen
-2. **Projekt-Setup** - Name, neues Supabase-Projekt in Kessel-Organisation erstellen
+2. **Projekt-Setup** - Name abfragen
 3. **Template klonen** - von `phkoenig/kessel-boilerplate`
-4. **Credentials konfigurieren** - `.env` und `.env.local`
+4. **Credentials konfigurieren** - `.env` (Vault) und `.env.local` (Shared-Projekt + Schema)
 5. **Git initialisieren** - Repository erstellen und verknüpfen
 6. **Dependencies installieren** - mit pnpm
-7. **Supabase Link** - Projekt mit Supabase verknüpfen
-8. **Datenbank-Migrationen** - Alle Tabellen automatisch erstellen
-9. **Standard-User anlegen** - Admin und User für sofortigen Zugriff
-10. **Vercel Link** - Optional Vercel-Projekt verknüpfen
-11. **Validierung** - Automatische Prüfung der Konfiguration
+7. **Supabase Link** - Shared-Projekt verknüpfen
+8. **Schema erstellen** - Neues Schema im Shared-Projekt (z.B. "galaxy")
+9. **Datenbank-Migrationen** - Alle Tabellen im Schema erstellen
+10. **Standard-User prüfen** - Shared Auth - User existieren für ALLE Projekte
+11. **Vercel Link** - Optional Vercel-Projekt verknüpfen
+12. **Validierung** - Automatische Prüfung der Konfiguration
 
-### Standard-User (automatisch erstellt)
+### Multi-Tenant Architektur
+
+**WICHTIG:** Die CLI verwendet eine **Multi-Tenant-Architektur**:
+- Alle Projekte teilen sich **ein** Supabase-Projekt (Shared)
+- Jedes Projekt erhält ein **eigenes Schema** für Daten-Isolation
+- Auth ist **shared** - Standard-User existieren für alle Projekte
+
+**Vorteile:**
+- ✅ Nur **ein** kostenloses Supabase-Projekt nötig
+- ✅ Vollständige Daten-Isolation zwischen Projekten
+- ✅ Beliebige Anzahl Projekte möglich
+
+### Standard-User (Shared Auth)
 
 | E-Mail | Passwort | Rolle |
 |--------|----------|-------|
@@ -113,7 +126,7 @@ kessel secrets get --env > secrets-backup.env
 **⚠️ SICHERHEITSHINWEIS:** Diese Credentials sind nur für die Entwicklung gedacht!  
 In Production müssen diese User gelöscht oder die Passwörter geändert werden.
 
-> **Hinweis:** Jedes neue Projekt erhält ein eigenes Supabase-Projekt in der Kessel-Organisation. Dies stellt saubere Isolation zwischen Projekten sicher.
+**Hinweis:** Diese User existieren **einmal** für alle Projekte (Shared Auth). Beim ersten Projekt werden sie erstellt, bei weiteren Projekten werden sie wiederverwendet.
 
 ## Konfiguration
 
