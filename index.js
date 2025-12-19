@@ -1313,6 +1313,32 @@ secretsCommand
   })
 
 // ============================================================================
+// CLI KONFIGURATION
+// ============================================================================
+
+// Lade Boilerplate-Version (falls verfügbar)
+function getBoilerplateVersion() {
+  try {
+    const boilerplatePath = path.resolve(__dirname, "..", "kessel-boilerplate", "boilerplate.json")
+    if (fs.existsSync(boilerplatePath)) {
+      const data = JSON.parse(fs.readFileSync(boilerplatePath, "utf-8"))
+      return data.version || "unknown"
+    }
+  } catch (e) {
+    // Ignorieren
+  }
+  return "unknown"
+}
+
+const CLI_VERSION = "2.0.0"
+const BOILERPLATE_VERSION = getBoilerplateVersion()
+
+program
+  .name("kessel")
+  .description("CLI für die Kessel Boilerplate - Erstellt neue Next.js-Projekte mit Supabase & ShadCN UI")
+  .version(`CLI: v${CLI_VERSION}\nBoilerplate: v${BOILERPLATE_VERSION}`, "-V, --version", "Zeigt CLI und Boilerplate Version")
+
+// ============================================================================
 // HAUPT-COMMAND (Projekt erstellen)
 // ============================================================================
 
