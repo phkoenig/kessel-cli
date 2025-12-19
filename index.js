@@ -1946,16 +1946,16 @@ program.action(async (projectNameArg, options) => {
     updateProgress(progressBar, 45, "Klonen Template...")
     // Verwende git clone statt degit für private Repositories mit Authentifizierung
     const templateRepo = config.defaultTemplateRepo
-    const templateVersion = options.templateVersion || "master" // Standard: master (latest)
+    const templateVersion = options.templateVersion || "main" // Standard: main (latest)
     
     console.log(chalk.blue(`\n2/6: Klone Template von ${templateRepo}...`))
-    if (templateVersion !== "master") {
+    if (templateVersion !== "main") {
       console.log(chalk.dim(`   Version: ${templateVersion}`))
     }
 
     // Verwende git clone mit GitHub Token für private Repositories
     const gitUrl = `https://${githubToken}@github.com/${templateRepo}.git`
-    const branch = templateVersion === "master" ? "master" : templateVersion
+    const branch = templateVersion === "main" ? "main" : templateVersion
     
     let cloneSuccess = false
     

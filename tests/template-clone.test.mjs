@@ -17,15 +17,15 @@ describe("Template-URL-Formatierung", () => {
   })
   
   test("Branch wird korrekt gesetzt", () => {
-    const templateVersion = "master"
-    const branch = templateVersion === "master" ? "master" : templateVersion
+    const templateVersion = "main"
+    const branch = templateVersion === "main" ? "main" : templateVersion
     
-    expect(branch).toBe("master")
+    expect(branch).toBe("main")
   })
   
   test("Custom Branch wird korrekt gesetzt", () => {
     const templateVersion = "v1.0.0"
-    const branch = templateVersion === "master" ? "master" : templateVersion
+    const branch = templateVersion === "main" ? "main" : templateVersion
     
     expect(branch).toBe("v1.0.0")
   })
