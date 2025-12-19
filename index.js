@@ -601,15 +601,18 @@ async function fetchServiceRoleKeyFromSupabase(projectRef, debugFn) {
       debugFn(`Service Role Key Output (${output.length} chars): ${output.substring(0, 300)}`)
     }
     
+    // Entferne ANSI Escape Codes aus dem Output
+    const cleanOutput = output.replace(/\x1b\[[0-9;]*m/g, '').replace(/\u001b\[\d+m/g, '')
+    
     // Parse Tabellen-Format: service_role │ KEY VALUE
-    const lines = output.split("\n")
+    const lines = cleanOutput.split("\n")
     for (const line of lines) {
       const trimmed = line.trim()
       if (trimmed.includes("service_role")) {
         const parts = trimmed.split("│").map((p) => p.trim())
         if (parts.length >= 2) {
           const keyName = parts[0].toLowerCase()
-          const keyValue = parts[1]
+          const keyValue = parts[1].replace(/\x1b\[[0-9;]*m/g, '').trim() // Entferne ANSI Codes auch aus dem Key
           if (keyName.includes("service_role") && keyValue && keyValue.length > 20) {
             if (debugFn) {
               debugFn(`✓ Service Role Key aus Tabelle gefunden: ${keyValue.substring(0, 20)}...`)
@@ -1973,20 +1976,23 @@ SERVICE_ROLE_KEY=${vaultServiceRoleKey}
     updateProgress(progressBar, 52, "Konfiguriere Public-Credentials...")
     console.log(chalk.blue("\n4/11: Konfiguriere Public-Credentials (.env.local)..."))
     console.log(chalk.dim("   → Shared Supabase-Projekt + Schema-Name"))
+    // Entferne ANSI Escape Codes aus den Keys (falls vorhanden)
+    const cleanAnonKey = appSupabaseAnonKey.replace(/\x1b\[[0-9;]*m/g, '').replace(/\u001b\[\d+m/g, '').trim()
+    const cleanServiceRoleKey = appSupabaseServiceRoleKey.replace(/\x1b\[[0-9;]*m/g, '').replace(/\u001b\[\d+m/g, '').trim()
+    
     const envLocalContent = `# Public-Credentials für Next.js Client
 # WICHTIG: Multi-Tenant Architektur - Alle Projekte teilen sich ein Supabase-Projekt
 # Jedes Projekt hat ein eigenes Schema für Daten-Isolation
 NEXT_PUBLIC_SUPABASE_URL=${appSupabaseUrl}
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${appSupabaseAnonKey}
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${cleanAnonKey}
 NEXT_PUBLIC_PROJECT_SCHEMA=${schemaName}
 
 # Service Role Key für Server-Side Operationen (User-Erstellung, etc.)
-# WICHTIG: Verwende den Vault Service Role Key für das Shared-Projekt
-SUPABASE_SERVICE_ROLE_KEY=${appSupabaseServiceRoleKey}
+# WICHTIG: Verwende den Service Role Key für das Shared-Projekt
+SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
 `
-    // Entferne ANSI Escape Codes (falls vorhanden) und schreibe .env.local
-    const cleanEnvLocalContent = envLocalContent.replace(/\x1b\[[0-9;]*m/g, '')
-    fs.writeFileSync(path.join(projectPath, ".env.local"), cleanEnvLocalContent)
+    // Schreibe .env.local (bereits bereinigt)
+    fs.writeFileSync(path.join(projectPath, ".env.local"), envLocalContent)
     console.log(chalk.green("✓ .env.local erstellt (Shared Supabase URL + Schema-Name)"))
 
     // 4.5. Schema im Shared-Projekt erstellen (über Supabase CLI)
