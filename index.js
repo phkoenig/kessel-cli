@@ -2127,8 +2127,8 @@ SUPABASE_SERVICE_ROLE_KEY=${appSupabaseServiceRoleKey}
     if (supabaseLinked && installDeps) {
       updateProgress(progressBar, 57, "Prüfe Standard-User...")
       console.log(chalk.blue("\n9/11: Prüfe Standard-User (Shared Auth)..."))
-      console.log(chalk.dim("   → admin@local / admin (wird nur einmal erstellt)"))
-      console.log(chalk.dim("   → user@local / user (wird nur einmal erstellt)"))
+      console.log(chalk.dim("   → admin@local / admin123 (wird nur einmal erstellt)"))
+      console.log(chalk.dim("   → user@local / user123 (wird nur einmal erstellt)"))
       
       try {
         // Warte kurz, damit die Migrationen vollständig angewendet sind
@@ -2138,7 +2138,7 @@ SUPABASE_SERVICE_ROLE_KEY=${appSupabaseServiceRoleKey}
         const { createClient: createSupabaseClient } = await import("@supabase/supabase-js")
         const supabaseAdmin = createSupabaseClient(
           appSupabaseUrl,
-          vaultServiceRoleKey,
+          appSupabaseServiceRoleKey, // Verwende Service Role Key vom Shared-Projekt
           {
             auth: {
               autoRefreshToken: false,
@@ -2162,7 +2162,7 @@ SUPABASE_SERVICE_ROLE_KEY=${appSupabaseServiceRoleKey}
             const userEnv = {
               ...process.env,
               NEXT_PUBLIC_SUPABASE_URL: appSupabaseUrl,
-              SUPABASE_SERVICE_ROLE_KEY: vaultServiceRoleKey,
+              SUPABASE_SERVICE_ROLE_KEY: appSupabaseServiceRoleKey, // Verwende Service Role Key vom Shared-Projekt
             }
             
             try {
@@ -2183,8 +2183,8 @@ SUPABASE_SERVICE_ROLE_KEY=${appSupabaseServiceRoleKey}
           }
         }
         
-        console.log(chalk.dim("   Login: admin@local / admin (Admin-Rolle)"))
-        console.log(chalk.dim("   Login: user@local / user (User-Rolle)"))
+        console.log(chalk.dim("   Login: admin@local / admin123 (Admin-Rolle)"))
+        console.log(chalk.dim("   Login: user@local / user123 (User-Rolle)"))
       } catch (userError) {
         console.log(chalk.yellow("⚠️  User-Check konnte nicht durchgeführt werden"))
         debug(`User Check Error: ${userError.message}`)

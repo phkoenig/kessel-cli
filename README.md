@@ -120,8 +120,8 @@ kessel secrets get --env > secrets-backup.env
 
 | E-Mail | Passwort | Rolle |
 |--------|----------|-------|
-| `admin@local` | `admin` | Admin |
-| `user@local` | `user` | User |
+| `admin@local` | `admin123` | Admin |
+| `user@local` | `user123` | User |
 
 **⚠️ SICHERHEITSHINWEIS:** Diese Credentials sind nur für die Entwicklung gedacht!  
 In Production müssen diese User gelöscht oder die Passwörter geändert werden.
