@@ -1909,56 +1909,55 @@ NEXT_PUBLIC_PROJECT_SCHEMA=${schemaName}
     fs.writeFileSync(path.join(projectPath, ".env.local"), envLocalContent)
     console.log(chalk.green("✓ .env.local erstellt (Shared Supabase URL + Schema-Name)"))
 
-    // 4.5. Schema im Shared-Projekt erstellen
+    // 4.5. Schema im Shared-Projekt erstellen (über Supabase CLI)
     updateProgress(progressBar, 53, "Erstelle Schema im Shared-Projekt...")
     console.log(chalk.blue("\n4.5/11: Erstelle Schema im Shared-Projekt..."))
     console.log(chalk.dim(`   → Schema: ${schemaName}`))
     
-    try {
-      // Erstelle Schema über Supabase CLI
-      const tempSchemaFile = path.join(projectPath, `.temp_schema_${Date.now()}.sql`)
-      fs.writeFileSync(tempSchemaFile, `CREATE SCHEMA IF NOT EXISTS "${schemaName}";`)
-      
-      try {
-        execSync(
-          `supabase db execute --file "${tempSchemaFile}" --project-ref ${projectRef}`,
-          {
-            stdio: "pipe",
-            cwd: projectPath,
-          }
-        )
-        console.log(chalk.green(`✓ Schema "${schemaName}" erstellt`))
-      } catch (sqlError) {
-        debug(`Supabase CLI Schema-Erstellung fehlgeschlagen: ${sqlError.message}`)
-        throw sqlError
-      } finally {
-        // Cleanup
-        try {
-          fs.unlinkSync(tempSchemaFile)
-        } catch {
-          // Ignoriere Cleanup-Fehler
-        }
-      }
-    } catch (schemaError) {
-      console.log(chalk.yellow(`⚠️  Schema-Erstellung fehlgeschlagen: ${schemaError.message}`))
-      console.log(chalk.dim("   → Schema muss manuell erstellt werden:"))
-      console.log(chalk.dim(`   CREATE SCHEMA IF NOT EXISTS "${schemaName}";`))
-      console.log(chalk.dim(`   Oder: supabase db execute --file schema.sql --project-ref ${projectRef}`))
-    }
+    // Schema wird automatisch beim Migration-Lauf erstellt
+    // Das Migration-Script erstellt das Schema, falls es nicht existiert
+    console.log(chalk.dim(`   → Schema wird beim Migration-Lauf automatisch erstellt`))
 
     // 5. Git initialisieren und Remote setzen
     updateProgress(progressBar, 54, "Initialisiere Git...")
     console.log(chalk.blue("\n5/11: Initialisiere Git..."))
-    execSync("git init", { cwd: projectPath, stdio: "ignore" })
+    
+    // Prüfe ob Git bereits initialisiert ist
+    const gitDir = path.join(projectPath, ".git")
+    if (!fs.existsSync(gitDir)) {
+      execSync("git init", { cwd: projectPath, stdio: "ignore" })
+    }
 
     const { data: userData } = await octokit.rest.users.getAuthenticated()
     const remoteUrl = `https://github.com/${userData.login}/${projectName}.git`
 
-    execSync(`git remote add origin ${remoteUrl}`, {
-      cwd: projectPath,
-      stdio: "ignore",
-    })
-    console.log(chalk.green("✓ Git initialisiert und Remote gesetzt"))
+    // Prüfe ob Remote bereits existiert
+    try {
+      const existingRemote = execSync("git remote get-url origin", {
+        cwd: projectPath,
+        stdio: "pipe",
+        encoding: "utf-8",
+      }).trim()
+      
+      if (existingRemote === remoteUrl) {
+        console.log(chalk.green("✓ Git Remote bereits korrekt konfiguriert"))
+      } else {
+        // Remote existiert, aber mit anderer URL - entferne und füge neu hinzu
+        execSync("git remote remove origin", { cwd: projectPath, stdio: "ignore" })
+        execSync(`git remote add origin ${remoteUrl}`, {
+          cwd: projectPath,
+          stdio: "ignore",
+        })
+        console.log(chalk.green("✓ Git Remote aktualisiert"))
+      }
+    } catch (remoteError) {
+      // Remote existiert nicht - füge hinzu
+      execSync(`git remote add origin ${remoteUrl}`, {
+        cwd: projectPath,
+        stdio: "ignore",
+      })
+      console.log(chalk.green("✓ Git Remote gesetzt"))
+    }
 
     // 6. Abhängigkeiten installieren
     if (installDeps) {
@@ -2030,10 +2029,12 @@ NEXT_PUBLIC_PROJECT_SCHEMA=${schemaName}
           console.log(chalk.yellow("⚠️  Migrationen konnten nicht automatisch angewendet werden"))
           debug(`Migration Error: ${migrationError.message}`)
           console.log(chalk.dim(`   → Führe manuell aus: node scripts/apply-migrations-to-schema.mjs ${schemaName}`))
+          console.log(chalk.dim(`   → Oder verwende Supabase Dashboard SQL Editor`))
         }
       } else {
         console.log(chalk.yellow("⚠️  Migration-Script nicht gefunden"))
         console.log(chalk.dim(`   → Erstelle Schema manuell: CREATE SCHEMA "${schemaName}";`))
+        console.log(chalk.dim(`   → Dann führe Migrationen im Supabase Dashboard aus`))
       }
     } catch (migrationError) {
       console.log(chalk.yellow("⚠️  Migrationen konnten nicht automatisch angewendet werden"))
