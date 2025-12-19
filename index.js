@@ -1905,6 +1905,10 @@ SERVICE_ROLE_KEY=${vaultServiceRoleKey}
 NEXT_PUBLIC_SUPABASE_URL=${appSupabaseUrl}
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${appSupabaseAnonKey}
 NEXT_PUBLIC_PROJECT_SCHEMA=${schemaName}
+
+# Service Role Key für Server-Side Operationen (User-Erstellung, etc.)
+# WICHTIG: Verwende den Vault Service Role Key für das Shared-Projekt
+SUPABASE_SERVICE_ROLE_KEY=${vaultServiceRoleKey}
 `
     fs.writeFileSync(path.join(projectPath, ".env.local"), envLocalContent)
     console.log(chalk.green("✓ .env.local erstellt (Shared Supabase URL + Schema-Name)"))
@@ -2075,13 +2079,27 @@ NEXT_PUBLIC_PROJECT_SCHEMA=${schemaName}
           console.log(chalk.green("✓ Standard-User existieren bereits (Shared Auth)"))
         } else {
           // Führe das create-test-users Script aus (erstellt nur fehlende User)
-          const createUsersScript = path.join(projectPath, "scripts/create-test-users.mjs")
+          const createUsersScript = path.join(projectPath, "scripts", "create-test-users.mjs")
           if (fs.existsSync(createUsersScript)) {
-            execSync("node scripts/create-test-users.mjs", {
-              cwd: projectPath,
-              stdio: "pipe",
-            })
-            console.log(chalk.green("✓ Standard-User erstellt/aktualisiert"))
+            // Setze Environment-Variablen für das Script
+            const userEnv = {
+              ...process.env,
+              NEXT_PUBLIC_SUPABASE_URL: appSupabaseUrl,
+              SUPABASE_SERVICE_ROLE_KEY: vaultServiceRoleKey,
+            }
+            
+            try {
+              execSync("node scripts/create-test-users.mjs", {
+                cwd: projectPath,
+                stdio: "inherit", // Zeige Output für Debugging
+                env: userEnv,
+              })
+              console.log(chalk.green("✓ Standard-User erstellt/aktualisiert"))
+            } catch (userScriptError) {
+              console.log(chalk.yellow("⚠️  User-Script fehlgeschlagen"))
+              debug(`User Script Error: ${userScriptError.message}`)
+              console.log(chalk.dim("   → Führe manuell aus: pnpm run setup:users"))
+            }
           } else {
             console.log(chalk.yellow("⚠️  create-test-users.mjs nicht gefunden"))
             debug(`Script nicht gefunden: ${createUsersScript}`)
