@@ -34,7 +34,7 @@ export async function runInitCommand(projectNameArg, options) {
     
     // Führe Pre-Checks manuell aus mit eigener Ausgabe
     const precheckTasks = createPrecheckTasks(config)
-    const tasks = precheckTasks.listr.tasks || precheckTasks.tasks || []
+    const tasks = precheckTasks.tasks || []
     
     for (const taskDef of tasks) {
       // Prüfe ob Task übersprungen werden soll
