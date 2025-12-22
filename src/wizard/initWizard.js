@@ -108,12 +108,21 @@ async function loadExistingProfile(projectRoot) {
  */
 function migrateProfile(profile) {
   const migrated = { ...profile }
+  
+  // Migriere SUPABASE_BACKEND_URL nur wenn es die INFRA-DB (Kessel) ist
   if (profile.SUPABASE_BACKEND_URL && !profile.SUPABASE_INFRA_URL) {
-    migrated.SUPABASE_INFRA_URL = profile.SUPABASE_BACKEND_URL
+    const backendUrl = profile.SUPABASE_BACKEND_URL
+    // Prüfe ob es die Kessel-DB ist (endet mit ...kashi)
+    if (backendUrl.includes('ufqlocxqizmiaozkashi')) {
+      migrated.SUPABASE_INFRA_URL = backendUrl
+    }
+    // Wenn es die DEV-DB ist, ignorieren wir es (verwenden Default)
   }
+  
   if (profile.SUPABASE_VAULT_SERVICE_ROLE_KEY && !profile.SUPABASE_SERVICE_ROLE_KEY) {
     migrated.SUPABASE_SERVICE_ROLE_KEY = profile.SUPABASE_VAULT_SERVICE_ROLE_KEY
   }
+  
   return migrated
 }
 
@@ -159,11 +168,16 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
   }
   
   // 2. INFRA-DB URL
+  // Prüfe ob SUPABASE_BACKEND_URL die INFRA-DB ist (nur wenn es Kessel ist)
+  const backendUrlFromProfile = profile?.SUPABASE_BACKEND_URL
+  const isValidInfraDb = backendUrlFromProfile?.includes('ufqlocxqizmiaozkashi')
+  const infraUrlDefault = profile?.SUPABASE_INFRA_URL || (isValidInfraDb ? backendUrlFromProfile : null) || DEFAULTS.infraDb.url
+  
   const { infraUrl } = await enquirer.prompt({
     type: 'input',
     name: 'infraUrl',
     message: 'INFRA-DB URL (Kessel - Auth, Vault, Multi-Tenant):',
-    initial: profile?.SUPABASE_INFRA_URL || profile?.SUPABASE_BACKEND_URL || DEFAULTS.infraDb.url,
+    initial: infraUrlDefault,
     validate: (value) => {
       if (!value || value.trim().length === 0) {
         return 'INFRA-DB URL ist erforderlich'
