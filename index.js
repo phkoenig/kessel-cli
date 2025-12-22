@@ -11,8 +11,13 @@
 import { register } from 'esbuild-register/dist/node.js'
 
 register({
-  loader: 'jsx',
   target: 'node18',
+  format: 'esm',
+  loader: {
+    '.js': 'jsx',
+  },
+  jsxFactory: 'React.createElement',
+  jsxFragment: 'React.Fragment',
 })
 
 // Importiere und starte die neue CLI

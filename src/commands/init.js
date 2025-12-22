@@ -1,7 +1,7 @@
 import path from "path"
 import React from "react"
 import { render } from "ink"
-import { App } from "../components/App.js"
+import { App } from "../components/App.jsx"
 
 /**
  * Init Command - Erstellt ein neues Projekt
