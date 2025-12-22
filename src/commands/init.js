@@ -26,22 +26,26 @@ export async function runInitCommand(projectNameArg, options) {
     // Phase 0: Wizard - Sammle alle Informationen
     renderPhaseHeader(0, "WIZARD", 0)
     const config = await runInitWizard(projectNameArg, currentCwd)
+    console.log(chalk.green("✓ Wizard abgeschlossen\n"))
     
     // Phase 1: Pre-Checks
-    renderPhaseHeader(1, "PRE-CHECKS", 0)
+    renderPhaseHeader(1, "PRE-CHECKS", 20)
     const ctx = {}
     const precheckTasks = createPrecheckTasks(config)
     await precheckTasks.run(ctx)
+    console.log(chalk.green("✓ Pre-Checks abgeschlossen\n"))
     
     // Phase 2: Setup
-    renderPhaseHeader(2, "SETUP", 50)
+    renderPhaseHeader(2, "SETUP", 40)
     const setupTasks = createSetupTasks(config)
     await setupTasks.run(ctx)
+    console.log(chalk.green("✓ Setup abgeschlossen\n"))
     
     // Phase 3: Create
-    renderPhaseHeader(3, "PROJEKT-ERSTELLUNG", 70)
+    renderPhaseHeader(3, "PROJEKT-ERSTELLUNG", 60)
     const createTasks = createProjectTasks(config, ctx, projectPath)
     await createTasks.run(ctx)
+    console.log(chalk.green("✓ Projekt-Erstellung abgeschlossen\n"))
     
     // Erfolg
     console.log(chalk.green.bold(`\n✨ Projekt "${config.projectName}" erfolgreich erstellt!\n`))

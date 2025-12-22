@@ -4,12 +4,12 @@ import chalk from "chalk"
  * Rendert das Kessel CLI Banner
  */
 export function renderBanner() {
-  console.log(chalk.cyan.bold(`
-  ╭─────────────────────────────────────╮
-  │     🚀 KESSEL CLI v2.1.0            │
-  │     B2B App Boilerplate Generator   │
-  ╰─────────────────────────────────────╯
-  `))
+  console.log()
+  console.log(chalk.cyan.bold("  ╭─────────────────────────────────────╮"))
+  console.log(chalk.cyan.bold("  │     🚀 KESSEL CLI v2.1.0            │"))
+  console.log(chalk.cyan.bold("  │     B2B App Boilerplate Generator   │"))
+  console.log(chalk.cyan.bold("  ╰─────────────────────────────────────╯"))
+  console.log()
 }
 
 /**
@@ -19,13 +19,14 @@ export function renderBanner() {
  * @param {number} progress - Fortschritt in Prozent (0-100)
  */
 export function renderPhaseHeader(phase, title, progress) {
-  const progressBar = renderProgressBar(progress, 30)
+  const progressBar = renderProgressBar(progress, 25)
+  const progressStr = `${progress}%`.padStart(4)
   
-  console.log(chalk.cyan(`
-  ┌─── PHASE ${phase}: ${title} ───────────────────────────┐
-  │ ${progressBar} ${progress}%
-  └────────────────────────────────────────────────────────┘
-  `))
+  console.log()
+  console.log(chalk.cyan.bold(`  ┌─── PHASE ${phase}: ${title}`))
+  console.log(chalk.cyan(`  │ ${progressBar} ${progressStr}`))
+  console.log(chalk.cyan(`  └─────────────────────────────────────────────┘`))
+  console.log()
 }
 
 /**

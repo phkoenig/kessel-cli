@@ -1,0 +1,44 @@
+# Tests
+tests/
+*.test.mjs
+*.test.js
+
+# Development files
+docs/
+*.md
+!README.md
+
+# Config files (sensitive)
+config.json
+*.kesselprofile
+*.env
+*.env.local
+
+# Migration scripts (not needed in package)
+migrate-*.mjs
+setup-*.mjs
+create-*.sql
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+tmp/
+temp/
+scratch/
+

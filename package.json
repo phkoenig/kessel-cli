@@ -17,8 +17,19 @@
     "test:project": "node tests/test-project-creation.mjs"
   },
   "keywords": ["nextjs", "supabase", "shadcn", "cli", "boilerplate"],
-  "author": "",
+  "author": "Philip König",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phkoenig/kessel-cli.git"
+  },
+  "files": [
+    "index.js",
+    "src/",
+    "lib/",
+    "config.example.json",
+    "README.md"
+  ],
   "packageManager": "pnpm@10.22.0",
   "dependencies": {
     "@supabase/supabase-js": "^2.81.1",
