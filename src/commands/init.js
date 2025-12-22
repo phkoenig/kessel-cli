@@ -31,12 +31,12 @@ export async function runInitCommand(projectNameArg, options) {
     // Phase 1: Pre-Checks
     renderPhaseHeader(1, "PRE-CHECKS", 20)
     const ctx = {}
-    const precheckTasks = createPrecheckTasks(config)
     
-    // Zeige Fortschritt während der Ausführung
-    console.log(chalk.dim("Führe Pre-Checks aus...\n"))
+    // Führe Pre-Checks manuell aus mit eigener Ausgabe
+    console.log(chalk.cyan("Führe Pre-Checks aus...\n"))
     
     try {
+      const precheckTasks = createPrecheckTasks(config)
       await precheckTasks.run(ctx)
       console.log(chalk.green("\n✓ Pre-Checks abgeschlossen\n"))
     } catch (error) {
