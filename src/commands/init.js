@@ -32,8 +32,18 @@ export async function runInitCommand(projectNameArg, options) {
     renderPhaseHeader(1, "PRE-CHECKS", 20)
     const ctx = {}
     const precheckTasks = createPrecheckTasks(config)
-    await precheckTasks.run(ctx)
-    console.log(chalk.green("✓ Pre-Checks abgeschlossen\n"))
+    
+    try {
+      await precheckTasks.run(ctx)
+      console.log(chalk.green("✓ Pre-Checks abgeschlossen\n"))
+    } catch (error) {
+      console.error(chalk.red.bold("\n❌ Pre-Check Fehler:"))
+      console.error(chalk.red(error.message))
+      if (verbose) {
+        console.error(chalk.dim(error.stack))
+      }
+      throw error
+    }
     
     // Phase 2: Setup
     renderPhaseHeader(2, "SETUP", 40)

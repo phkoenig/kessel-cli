@@ -114,11 +114,14 @@ export function createPrecheckTasks(config) {
     },
   ], {
     concurrent: false,
+    renderer: 'default',
     rendererOptions: {
       collapseSubtasks: false,
       showTimer: false,
       clearOutput: false,
       formatOutput: 'default',
+      showSubtasks: true,
+      collapse: false,
     },
   })
 }
