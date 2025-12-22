@@ -218,7 +218,7 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
   let serviceRoleKey = null
   const tempServiceRoleKey = profile?.SUPABASE_SERVICE_ROLE_KEY || profile?.SUPABASE_VAULT_SERVICE_ROLE_KEY
   
-  if (tempServiceRoleKey && infraDbUrl) {
+  if (tempServiceRoleKey && infraUrl) {
     console.log(chalk.blue("🔍 Versuche SERVICE_ROLE_KEY aus Vault zu holen..."))
     serviceRoleKey = await fetchServiceRoleKeyFromVault(infraUrl, tempServiceRoleKey, (msg) => {
       // Silent - keine Debug-Ausgaben im Wizard
