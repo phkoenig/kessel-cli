@@ -38,7 +38,8 @@ export function renderPhaseHeader(phase, title, progress) {
 export function renderProgressBar(percent, width = 30) {
   const filled = Math.round((percent / 100) * width)
   const empty = width - filled
-  return chalk.green('█'.repeat(filled)) + chalk.gray('░'.repeat(empty))
+  const bar = chalk.green('█'.repeat(filled)) + chalk.gray('░'.repeat(empty))
+  return bar
 }
 
 /**
