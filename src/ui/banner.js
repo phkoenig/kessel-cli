@@ -5,10 +5,12 @@ import chalk from "chalk"
  */
 export function renderBanner() {
   console.log()
-  console.log(chalk.cyan.bold("  ╭─────────────────────────────────────╮"))
-  console.log(chalk.cyan.bold("  │     🚀 KESSEL CLI v2.1.0            │"))
-  console.log(chalk.cyan.bold("  │     B2B App Boilerplate Generator   │"))
-  console.log(chalk.cyan.bold("  ╰─────────────────────────────────────╯"))
+  console.log(chalk.cyan.bold("  ╔═══════════════════════════════════════════════════════╗"))
+  console.log(chalk.cyan.bold("  ║                                                       ║"))
+  console.log(chalk.cyan.bold("  ║     🚀  KESSEL CLI v2.1.0                            ║"))
+  console.log(chalk.cyan.bold("  ║     B2B App Boilerplate Generator                     ║"))
+  console.log(chalk.cyan.bold("  ║                                                       ║"))
+  console.log(chalk.cyan.bold("  ╚═══════════════════════════════════════════════════════╝"))
   console.log()
 }
 
@@ -19,13 +21,16 @@ export function renderBanner() {
  * @param {number} progress - Fortschritt in Prozent (0-100)
  */
 export function renderPhaseHeader(phase, title, progress) {
-  const progressBar = renderProgressBar(progress, 25)
+  const progressBar = renderProgressBar(progress, 30)
   const progressStr = `${progress}%`.padStart(4)
+  const phaseLabel = `PHASE ${phase}`
+  const titleLength = title.length + phaseLabel.length + 3
+  const dashes = Math.max(0, 50 - titleLength)
   
   console.log()
-  console.log(chalk.cyan.bold(`  ┌─── PHASE ${phase}: ${title}`))
-  console.log(chalk.cyan(`  │ ${progressBar} ${progressStr}`))
-  console.log(chalk.cyan(`  └─────────────────────────────────────────────┘`))
+  console.log(chalk.cyan.bold(`  ╔═══ ${phaseLabel}: ${title} ${'═'.repeat(dashes)}╗`))
+  console.log(chalk.cyan(`  ║ ${progressBar} ${progressStr}${' '.repeat(Math.max(0, 20 - progressStr.length))}║`))
+  console.log(chalk.cyan(`  ╚${'═'.repeat(58)}╝`))
   console.log()
 }
 
