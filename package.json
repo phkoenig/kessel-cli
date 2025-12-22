@@ -9,7 +9,11 @@
   },
   "scripts": {
     "start": "node index.js",
-    "test": "node tests/test-project-creation.mjs",
+    "test": "node tests/run-all.mjs",
+    "test:all": "node tests/run-all.mjs",
+    "test:profile": "node tests/profile.test.mjs",
+    "test:infra-dev": "node tests/infra-dev-db.test.mjs",
+    "test:framework": "node tests/test-framework.mjs",
     "test:project": "node tests/test-project-creation.mjs"
   },
   "keywords": ["nextjs", "supabase", "shadcn", "cli", "boilerplate"],
