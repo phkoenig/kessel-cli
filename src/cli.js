@@ -61,14 +61,14 @@ program
     await runStatusCommand()
   })
 
-// Secrets Commands - werden vorerst aus index.js geladen (temporär)
-// TODO: Vollständig nach src/commands/secrets.js migrieren
+// Secrets Commands
 const secretsCommand = program
   .command("secrets")
   .description("Verwaltet Secrets in der INFRA-DB (Kessel Vault)")
 
-// Die Secrets-Subcommands werden dynamisch aus index.js geladen
-// Dies ist eine temporäre Lösung bis die vollständige Migration erfolgt ist
+// Registriere Secrets-Subcommands
+const { registerSecretsCommands } = await import("./commands/secrets.js")
+registerSecretsCommands(secretsCommand)
 
 program.parse(process.argv)
 
