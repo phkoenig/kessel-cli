@@ -74,4 +74,3 @@ export async function runInitCommand(projectNameArg, options) {
     process.exit(1)
   }
 }
-
