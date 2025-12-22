@@ -330,8 +330,7 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
     initial: createGithub !== 'none' && doInitialCommit,
   })
   
-  // Extrahiere Project Refs aus URLs
-  const infraProjectRef = infraUrl ? new URL(infraUrl).hostname.split(".")[0] : null
+  // Extrahiere Project Refs aus URLs (infraProjectRef wurde bereits oben extrahiert)
   const devProjectRef = devUrl ? new URL(devUrl).hostname.split(".")[0] : null
   
   // Generiere Schema-Name
