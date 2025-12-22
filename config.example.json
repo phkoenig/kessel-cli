@@ -1,5 +1,15 @@
 {
-  "defaultSupabaseUrl": "https://zedhieyjlfhygsfxzbze.supabase.co",
-  "defaultTemplateRepo": "phkoenig/next-supabase-shadcn-template"
+  "infraDb": {
+    "name": "Kessel",
+    "url": "https://ufqlocxqizmiaozkashi.supabase.co",
+    "projectRef": "ufqlocxqizmiaozkashi",
+    "description": "INFRA-DB: User, Auth, Vault, Multi-Tenant Schemas"
+  },
+  "devDb": {
+    "name": "MEGABRAIN",
+    "url": "https://jpmhwyjiuodsvjowddsm.supabase.co",
+    "projectRef": "jpmhwyjiuodsvjowddsm",
+    "description": "DEV-DB: App-Daten, Entwicklung (optional andere DB)"
+  },
+  "defaultTemplateRepo": "phkoenig/kessel-boilerplate"
 }
-

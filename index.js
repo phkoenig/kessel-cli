@@ -32,18 +32,43 @@ function loadConfig() {
   const configPath = path.join(__dirname, "config.json")
   if (fs.existsSync(configPath)) {
     try {
-      return JSON.parse(fs.readFileSync(configPath, "utf-8"))
+      const config = JSON.parse(fs.readFileSync(configPath, "utf-8"))
+      // Füge Kompatibilitäts-Properties hinzu
+      return {
+        ...config,
+        // Legacy-Kompatibilität: defaultSupabaseUrl zeigt auf INFRA-DB (Vault)
+        defaultSupabaseUrl: config.infraDb?.url || "https://ufqlocxqizmiaozkashi.supabase.co",
+        // Legacy-Kompatibilität: sharedSupabaseProject = INFRA-DB
+        sharedSupabaseProject: {
+          url: config.infraDb?.url || "https://ufqlocxqizmiaozkashi.supabase.co",
+          projectRef: config.infraDb?.projectRef || "ufqlocxqizmiaozkashi",
+        },
+      }
     } catch (error) {
       console.warn(chalk.yellow("⚠️  Konfigurationsdatei konnte nicht geladen werden, verwende Standardwerte"))
     }
   }
+  // Defaults: INFRA-DB = Kessel, DEV-DB = MEGABRAIN
   return {
+    infraDb: {
+      name: "Kessel",
+      url: "https://ufqlocxqizmiaozkashi.supabase.co",
+      projectRef: "ufqlocxqizmiaozkashi",
+      description: "INFRA-DB: User, Auth, Vault, Multi-Tenant Schemas",
+    },
+    devDb: {
+      name: "MEGABRAIN",
+      url: "https://jpmhwyjiuodsvjowddsm.supabase.co",
+      projectRef: "jpmhwyjiuodsvjowddsm",
+      description: "DEV-DB: App-Daten, Entwicklung",
+    },
+    defaultTemplateRepo: "phkoenig/kessel-boilerplate",
+    // Legacy-Kompatibilität
+    defaultSupabaseUrl: "https://ufqlocxqizmiaozkashi.supabase.co",
     sharedSupabaseProject: {
       url: "https://ufqlocxqizmiaozkashi.supabase.co",
       projectRef: "ufqlocxqizmiaozkashi",
     },
-    vaultSupabaseUrl: "https://zedhieyjlfhygsfxzbze.supabase.co",
-    defaultTemplateRepo: "phkoenig/kessel-boilerplate",
   }
 }
 
@@ -649,12 +674,12 @@ program
 // Secrets Subcommand
 const secretsCommand = program
   .command("secrets")
-  .description("Verwaltet Secrets im Supabase Vault")
+  .description("Verwaltet Secrets in der INFRA-DB (Kessel Vault)")
 
 // Get Secrets Command
 secretsCommand
   .command("get")
-  .description("Ruft Secrets aus dem Supabase Vault ab")
+  .description("Ruft Secrets aus der INFRA-DB (Kessel Vault) ab")
   .argument("[secret-name]", "Name des Secrets (optional, zeigt alle wenn nicht angegeben)")
   .option("--json", "Ausgabe im JSON-Format")
   .option("--env", "Ausgabe im .env-Format")
@@ -1640,31 +1665,34 @@ program.action(async (projectNameArg, options) => {
   }
 
   // Verwende Werte aus Pre-Checks
+  // NEUE ARCHITEKTUR: INFRA-DB (Kessel) + DEV-DB
   const vaultServiceRoleKey = secretsSetup?.serviceRoleKey || autoServiceRoleKey
-  const vaultSupabaseUrl = secretsSetup?.vaultUrl || config.defaultSupabaseUrl
+  const infraDbUrl = supabaseSetup?.infraDbUrl || config.infraDb?.url || config.defaultSupabaseUrl
+  const devDbUrl = supabaseSetup?.devDbUrl || config.devDb?.url || infraDbUrl
 
-  // 2. Schema im Shared Supabase-Projekt erstellen
+  // 2. Schema in der INFRA-DB erstellen (Multi-Tenant)
   updateProgress(progressBar, 25, "Supabase Schema konfigurieren...")
   
-  console.log(chalk.blue("\n📊 Multi-Tenant Setup: Erstelle Schema im Shared-Projekt..."))
+  console.log(chalk.blue("\n📊 Multi-Tenant Setup: Erstelle Schema in der INFRA-DB..."))
   
-  // Lade Shared-Projekt-Konfiguration
-  const sharedProject = config.sharedSupabaseProject || {
+  // Lade INFRA-DB Konfiguration (Legacy: sharedSupabaseProject)
+  const infraDb = config.infraDb || config.sharedSupabaseProject || {
     url: "https://ufqlocxqizmiaozkashi.supabase.co",
     projectRef: "ufqlocxqizmiaozkashi",
   }
   
-  const appSupabaseUrl = sharedProject.url
-  const projectRef = sharedProject.projectRef
+  const appSupabaseUrl = infraDb.url
+  const projectRef = infraDb.projectRef
   
   // Normalisiere Projektname für Schema (Postgres erlaubt keine Bindestriche in Schema-Namen)
   const schemaName = projectName.replace(/-/g, "_").toLowerCase()
   
-  console.log(chalk.dim(`   Shared-Projekt: ${projectRef}`))
+  console.log(chalk.dim(`   INFRA-DB: ${infraDb.name || "Kessel"} (${projectRef})`))
+  console.log(chalk.dim(`   DEV-DB: ${config.devDb?.name || "DEV"} (${config.devDb?.projectRef || "gleich"})`))
   console.log(chalk.dim(`   Schema-Name: ${schemaName}`))
   
-  // Versuche Anon Key vom Shared-Projekt abzurufen
-  console.log(chalk.blue("🔑 Rufe Anon Key vom Shared-Projekt ab..."))
+  // Versuche Anon Key von der INFRA-DB abzurufen
+  console.log(chalk.blue("🔑 Rufe Anon Key von der INFRA-DB ab..."))
   let appSupabaseAnonKey = await fetchAnonKeyFromSupabase(projectRef, debug)
   
   if (!appSupabaseAnonKey) {
@@ -1674,7 +1702,7 @@ program.action(async (projectNameArg, options) => {
       {
         type: "input",
         name: "appSupabaseAnonKey",
-        message: `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (vom Shared-Projekt ${projectRef}):`,
+        message: `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (von INFRA-DB ${projectRef}):`,
         validate: (input) => input.length > 0 || "Publishable Key ist erforderlich.",
       },
     ])
@@ -1683,14 +1711,14 @@ program.action(async (projectNameArg, options) => {
     console.log(chalk.green("✓ Anon Key automatisch abgerufen"))
   }
   
-  // Versuche Service Role Key vom Shared-Projekt abzurufen
-  console.log(chalk.blue("🔑 Rufe Service Role Key vom Shared-Projekt ab..."))
+  // Versuche Service Role Key von der INFRA-DB abzurufen
+  console.log(chalk.blue("🔑 Rufe Service Role Key von der INFRA-DB ab..."))
   let appSupabaseServiceRoleKey = await fetchServiceRoleKeyFromSupabase(projectRef, debug)
   
   if (!appSupabaseServiceRoleKey) {
-    // Fallback: Verwende Vault Service Role Key (falls Shared-Projekt = Vault)
+    // Fallback: Verwende Vault Service Role Key (INFRA-DB enthält Vault)
     console.log(chalk.yellow("⚠️  Konnte Service Role Key nicht automatisch abrufen"))
-    console.log(chalk.dim("   → Verwende Vault Service Role Key als Fallback"))
+    console.log(chalk.dim("   → Verwende INFRA-DB Service Role Key als Fallback"))
     appSupabaseServiceRoleKey = vaultServiceRoleKey
   } else {
     console.log(chalk.green("✓ Service Role Key automatisch abgerufen"))
@@ -2001,41 +2029,46 @@ program.action(async (projectNameArg, options) => {
     // 3. Bootstrap-Umgebungsvariablen (.env für pull-env Skript)
     updateProgress(progressBar, 50, "Konfiguriere Bootstrap-Credentials...")
     console.log(chalk.blue("\n3/11: Konfiguriere Bootstrap-Credentials (.env)..."))
-    console.log(chalk.dim("   → Zentrale Supabase URL für Vault-Zugriff"))
-    const bootstrapEnvContent = `# Bootstrap-Credentials für Vault-Zugriff
-# WICHTIG: Dies ist die URL des ZENTRALEN Supabase-Projekts (für Secrets)
-NEXT_PUBLIC_SUPABASE_URL=${vaultSupabaseUrl}
+    console.log(chalk.dim("   → INFRA-DB URL für Vault-Zugriff"))
+    const bootstrapEnvContent = `# Bootstrap-Credentials für Vault-Zugriff (INFRA-DB)
+# WICHTIG: Dies ist die URL der INFRA-DB (Kessel) mit integriertem Vault
+NEXT_PUBLIC_SUPABASE_URL=${infraDbUrl}
 SERVICE_ROLE_KEY=${vaultServiceRoleKey}
 `
     fs.writeFileSync(path.join(projectPath, ".env"), bootstrapEnvContent)
-    console.log(chalk.green("✓ .env erstellt (Zentrale Supabase URL + SERVICE_ROLE_KEY)"))
+    console.log(chalk.green("✓ .env erstellt (INFRA-DB URL + SERVICE_ROLE_KEY)"))
 
     // 4. Public-Umgebungsvariablen (.env.local für Next.js)
     updateProgress(progressBar, 52, "Konfiguriere Public-Credentials...")
     console.log(chalk.blue("\n4/11: Konfiguriere Public-Credentials (.env.local)..."))
-    console.log(chalk.dim("   → Shared Supabase-Projekt + Schema-Name"))
+    console.log(chalk.dim("   → INFRA-DB + DEV-DB + Schema-Name"))
     // Entferne ANSI Escape Codes aus den Keys (falls vorhanden)
     const cleanAnonKey = appSupabaseAnonKey.replace(/\x1b\[[0-9;]*m/g, '').replace(/\u001b\[\d+m/g, '').trim()
     const cleanServiceRoleKey = appSupabaseServiceRoleKey.replace(/\x1b\[[0-9;]*m/g, '').replace(/\u001b\[\d+m/g, '').trim()
     
     const envLocalContent = `# Public-Credentials für Next.js Client
-# WICHTIG: Multi-Tenant Architektur - Alle Projekte teilen sich ein Supabase-Projekt
+# Multi-Tenant Architektur: INFRA-DB (Auth, Vault) + DEV-DB (App-Daten)
 # Jedes Projekt hat ein eigenes Schema für Daten-Isolation
+
+# INFRA-DB (Kessel) - Auth, Vault, Multi-Tenant
 NEXT_PUBLIC_SUPABASE_URL=${appSupabaseUrl}
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${cleanAnonKey}
 NEXT_PUBLIC_PROJECT_SCHEMA=${schemaName}
 
+# DEV-DB - App-Daten, Entwicklung
+# Hinweis: Kann gleich INFRA-DB sein oder separate DB für fachliche Daten
+NEXT_PUBLIC_DEV_SUPABASE_URL=${devDbUrl}
+
 # Service Role Key für Server-Side Operationen (User-Erstellung, etc.)
-# WICHTIG: Verwende den Service Role Key für das Shared-Projekt
 SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
 `
     // Schreibe .env.local (bereits bereinigt)
     fs.writeFileSync(path.join(projectPath, ".env.local"), envLocalContent)
-    console.log(chalk.green("✓ .env.local erstellt (Shared Supabase URL + Schema-Name)"))
+    console.log(chalk.green("✓ .env.local erstellt (INFRA-DB + DEV-DB + Schema-Name)"))
 
-    // 4.5. Schema im Shared-Projekt erstellen (über Supabase CLI)
-    updateProgress(progressBar, 53, "Erstelle Schema im Shared-Projekt...")
-    console.log(chalk.blue("\n4.5/11: Erstelle Schema im Shared-Projekt..."))
+    // 4.5. Schema in der INFRA-DB erstellen (über Supabase CLI)
+    updateProgress(progressBar, 53, "Erstelle Schema in der INFRA-DB...")
+    console.log(chalk.blue("\n4.5/11: Erstelle Schema in der INFRA-DB..."))
     console.log(chalk.dim(`   → Schema: ${schemaName}`))
     
     // Schema wird automatisch beim Migration-Lauf erstellt
@@ -2096,20 +2129,20 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
       console.log(chalk.yellow("\n6/11: Übersprungen (Dependencies nicht installiert)"))
     }
 
-    // 7. Supabase Link zum Shared-Projekt
+    // 7. Supabase Link zur INFRA-DB
     let supabaseLinked = false
     
     if (appSupabaseUrl && appSupabaseAnonKey) {
-      updateProgress(progressBar, 55, "Verlinke Shared Supabase-Projekt...")
-      console.log(chalk.blue("\n7/11: Verlinke Shared Supabase-Projekt..."))
+      updateProgress(progressBar, 55, "Verlinke INFRA-DB...")
+      console.log(chalk.blue("\n7/11: Verlinke INFRA-DB (Kessel)..."))
       console.log(chalk.dim(`   → Project Ref: ${projectRef}`))
       try {
-        // Führe supabase link aus (zum Shared-Projekt)
+        // Führe supabase link aus (zur INFRA-DB)
         execSync(`supabase link --project-ref ${projectRef}`, {
           cwd: projectPath,
           stdio: "pipe",
         })
-        console.log(chalk.green(`✓ Shared Supabase-Projekt verlinkt (${projectRef})`))
+        console.log(chalk.green(`✓ INFRA-DB verlinkt (${projectRef})`))
         supabaseLinked = true
       } catch (linkError) {
         // Link-Fehler sind nicht kritisch - das Projekt funktioniert trotzdem
@@ -2148,7 +2181,7 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
         const env = {
           ...process.env,
           NEXT_PUBLIC_SUPABASE_URL: appSupabaseUrl,
-          SERVICE_ROLE_KEY: appSupabaseServiceRoleKey, // Verwende Service Role Key vom Shared-Projekt
+          SERVICE_ROLE_KEY: appSupabaseServiceRoleKey, // Verwende Service Role Key von der INFRA-DB
           SUPABASE_SERVICE_ROLE_KEY: appSupabaseServiceRoleKey, // Auch als SUPABASE_SERVICE_ROLE_KEY für Scripts
           NEXT_PUBLIC_PROJECT_SCHEMA: schemaName,
           SUPABASE_PROJECT_REF: projectRef,
@@ -2194,7 +2227,7 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
         const { createClient: createSupabaseClient } = await import("@supabase/supabase-js")
         const supabaseAdmin = createSupabaseClient(
           appSupabaseUrl,
-          appSupabaseServiceRoleKey, // Verwende Service Role Key vom Shared-Projekt
+          appSupabaseServiceRoleKey, // Verwende Service Role Key von der INFRA-DB
           {
             auth: {
               autoRefreshToken: false,
@@ -2218,7 +2251,7 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
             const userEnv = {
               ...process.env,
               NEXT_PUBLIC_SUPABASE_URL: appSupabaseUrl,
-              SUPABASE_SERVICE_ROLE_KEY: appSupabaseServiceRoleKey, // Verwende Service Role Key vom Shared-Projekt
+              SUPABASE_SERVICE_ROLE_KEY: appSupabaseServiceRoleKey, // Verwende Service Role Key von der INFRA-DB
             }
             
             try {
