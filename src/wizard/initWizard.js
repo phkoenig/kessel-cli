@@ -11,7 +11,7 @@ import chalk from "chalk"
  * @param {string} projectRoot - Projekt-Root-Verzeichnis
  * @returns {Promise<Object|null>} Profil oder null
  */
-async function loadExistingProfile(projectRoot) {
+export async function loadExistingProfile(projectRoot) {
   // 1. Suche lokales Profil
   if (projectRoot) {
     try {

@@ -16,7 +16,13 @@
     "test:framework": "node tests/test-framework.mjs",
     "test:project": "node tests/test-project-creation.mjs"
   },
-  "keywords": ["nextjs", "supabase", "shadcn", "cli", "boilerplate"],
+  "keywords": [
+    "nextjs",
+    "supabase",
+    "shadcn",
+    "cli",
+    "boilerplate"
+  ],
   "author": "Philip König",
   "license": "ISC",
   "repository": {
@@ -37,8 +43,18 @@
     "commander": "^14.0.2",
     "degit": "^2.8.4",
     "enquirer": "^2.4.1",
+    "ink": "^6.6.0",
+    "ink-box": "^2.0.0",
+    "ink-confirm-input": "^2.0.0",
+    "ink-select-input": "^6.2.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
     "inquirer": "^12.11.1",
     "listr2": "^8.0.0",
-    "octokit": "^5.0.5"
+    "octokit": "^5.0.5",
+    "react": "^19.2.3"
+  },
+  "devDependencies": {
+    "esbuild-register": "^3.6.0"
   }
 }

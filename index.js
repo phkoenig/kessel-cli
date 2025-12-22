@@ -7,6 +7,14 @@
  * Die gesamte CLI-Logik wurde in modulare Dateien unter src/ migriert.
  */
 
+// Registriere esbuild für JSX-Unterstützung
+import { register } from 'esbuild-register/dist/node.js'
+
+register({
+  loader: 'jsx',
+  target: 'node18',
+})
+
 // Importiere und starte die neue CLI
 import("./src/cli.js").catch((error) => {
   console.error("❌ Fehler beim Laden der CLI:", error.message)
