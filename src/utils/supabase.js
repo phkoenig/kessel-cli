@@ -290,7 +290,7 @@ export async function fetchAnonKeyFromSupabase(projectRef, debugFn) {
 }
 
 /**
- * Versuche Service Role Key automatisch abzurufen (via Supabase CLI)
+ * Versuche Service Role Key automatisch abzurufen (via Supabase CLI Management API)
  * @param {string} projectRef - Project Reference ID
  * @param {Function} debugFn - Debug-Funktion
  * @returns {Promise<string|null>} Service Role Key oder null
@@ -338,6 +338,59 @@ export async function fetchServiceRoleKeyFromSupabase(projectRef, debugFn) {
   } catch (error) {
     if (debugFn) {
       debugFn(`❌ Fehler beim Abrufen von Service Role Key: ${error.message}`)
+    }
+    return null
+  }
+}
+
+/**
+ * Versuche Service Role Key aus dem Vault der INFRA-DB zu holen
+ * @param {string} infraDbUrl - INFRA-DB URL
+ * @param {string} tempServiceRoleKey - Temporärer Service Role Key (z.B. aus Profil) für Vault-Zugriff
+ * @param {Function} debugFn - Debug-Funktion
+ * @returns {Promise<string|null>} Service Role Key oder null
+ */
+export async function fetchServiceRoleKeyFromVault(infraDbUrl, tempServiceRoleKey, debugFn) {
+  if (!tempServiceRoleKey) {
+    if (debugFn) {
+      debugFn("⚠️  Kein temporärer Service Role Key für Vault-Zugriff vorhanden")
+    }
+    return null
+  }
+
+  try {
+    if (debugFn) {
+      debugFn(`🔍 Versuche SERVICE_ROLE_KEY aus Vault zu holen...`)
+    }
+
+    // Versuche über RPC-Funktion
+    const { callRpcViaHttp } = await import("./supabase.js")
+    const result = await callRpcViaHttp(
+      infraDbUrl,
+      tempServiceRoleKey,
+      "read_secret",
+      { secret_name: "SERVICE_ROLE_KEY" },
+      false // verbose
+    )
+
+    if (result.error) {
+      if (debugFn) {
+        debugFn(`⚠️  Vault-Zugriff fehlgeschlagen: ${result.error.message}`)
+      }
+      return null
+    }
+
+    if (result.data && typeof result.data === 'string' && result.data.length > 20) {
+      if (debugFn) {
+        debugFn(`✅ SERVICE_ROLE_KEY aus Vault geholt`)
+      }
+      return result.data
+    }
+
+    return null
+  } catch (error) {
+    if (debugFn) {
+      debugFn(`⚠️  Fehler beim Abrufen aus Vault: ${error.message}`)
     }
     return null
   }

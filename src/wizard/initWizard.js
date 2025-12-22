@@ -1,6 +1,7 @@
 import enquirer from "enquirer"
 import { loadProfile, normalizeUsername, getProfileDir } from "../../lib/profile.js"
 import { DEFAULTS } from "../config.js"
+import { fetchServiceRoleKeyFromSupabase, fetchServiceRoleKeyFromVault } from "../utils/supabase.js"
 import fs from "fs"
 import path from "path"
 import chalk from "chalk"
@@ -210,19 +211,61 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
     },
   })
   
-  // 4. SERVICE_ROLE_KEY
-  const { serviceRoleKey } = await enquirer.prompt({
-    type: 'password',
-    name: 'serviceRoleKey',
-    message: 'SERVICE_ROLE_KEY (für INFRA-DB/Vault-Zugriff):',
-    initial: profile?.SUPABASE_SERVICE_ROLE_KEY || profile?.SUPABASE_VAULT_SERVICE_ROLE_KEY || '',
-    validate: (value) => {
-      if (!value || value.trim().length === 0) {
-        return 'Service Role Key ist erforderlich'
-      }
-      return true
-    },
-  })
+  // 4. SERVICE_ROLE_KEY - Versuche automatisch zu holen
+  const infraProjectRef = infraUrl ? new URL(infraUrl).hostname.split(".")[0] : null
+  
+  // Versuche 1: Aus Vault holen (wenn temporärer Key vorhanden)
+  let serviceRoleKey = null
+  const tempServiceRoleKey = profile?.SUPABASE_SERVICE_ROLE_KEY || profile?.SUPABASE_VAULT_SERVICE_ROLE_KEY
+  
+  if (tempServiceRoleKey && infraDbUrl) {
+    console.log(chalk.blue("🔍 Versuche SERVICE_ROLE_KEY aus Vault zu holen..."))
+    serviceRoleKey = await fetchServiceRoleKeyFromVault(infraUrl, tempServiceRoleKey, (msg) => {
+      // Silent - keine Debug-Ausgaben im Wizard
+    })
+    
+    if (serviceRoleKey) {
+      console.log(chalk.green("✓ SERVICE_ROLE_KEY aus Vault geholt"))
+    } else {
+      console.log(chalk.yellow("⚠️  Vault-Zugriff fehlgeschlagen, versuche Management API..."))
+    }
+  }
+  
+  // Versuche 2: Über Management API (Supabase CLI)
+  if (!serviceRoleKey && infraProjectRef) {
+    serviceRoleKey = await fetchServiceRoleKeyFromSupabase(infraProjectRef, (msg) => {
+      // Silent - keine Debug-Ausgaben im Wizard
+    })
+    
+    if (serviceRoleKey) {
+      console.log(chalk.green("✓ SERVICE_ROLE_KEY über Management API geholt"))
+    }
+  }
+  
+  // Versuche 3: Aus Profil
+  if (!serviceRoleKey) {
+    serviceRoleKey = tempServiceRoleKey
+    if (serviceRoleKey) {
+      console.log(chalk.dim("ℹ️  Verwende SERVICE_ROLE_KEY aus Profil"))
+    }
+  }
+  
+  // Falls immer noch kein Key: Frage nach manueller Eingabe
+  if (!serviceRoleKey) {
+    const prompt = await enquirer.prompt({
+      type: 'password',
+      name: 'serviceRoleKey',
+      message: 'SERVICE_ROLE_KEY (für INFRA-DB/Vault-Zugriff):',
+      initial: '',
+      validate: (value) => {
+        if (!value || value.trim().length === 0) {
+          return 'Service Role Key ist erforderlich'
+        }
+        return true
+      },
+    })
+    serviceRoleKey = prompt.serviceRoleKey
+  }
   
   // 5. Projektname
   const currentDirName = projectRoot ? path.basename(projectRoot) : 'mein-projekt'
