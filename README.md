@@ -191,9 +191,33 @@ Das Tool speichert Konfigurationen in `~/.kessel/{username}.kesselprofile`:
 
 **Wichtig:** In Cursor sollte nur **ein** Supabase-MCP pro Workspace aktiv sein!
 
-Für B2B-Apps:
-- **MCP zeigt auf DEV-DB** - für Cursor-gesteuerte Entwicklung
-- **INFRA-DB via API/SDK** - kein separater MCP nötig
+### Automatische MCP-Konfiguration
+
+Die CLI aktualisiert automatisch die `.cursor/mcp.json` Datei am Ende des Projekterstellungsprozesses:
+
+1. **Entfernt** alle existierenden Supabase-MCP Server
+2. **Erstellt** einen neuen MCP Server für die DEV-DB
+3. **Benennt** ihn nach dem Projekt: `supabase_DEV_{schema_name}`
+
+```json
+{
+  "mcpServers": {
+    "supabase_DEV_mein_projekt": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=jpmhwyjiuodsvjowddsm"
+    }
+  }
+}
+```
+
+### Warum nur DEV-DB?
+
+| Datenbank | MCP-Zugriff | Grund |
+|-----------|-------------|-------|
+| **DEV-DB** | ✅ Ja (MCP) | Cursor-gesteuerte Entwicklung |
+| **INFRA-DB** | ❌ Nein | Zugriff über Backend-API/SDK |
+
+Die INFRA-DB (Kessel) enthält sensible Daten (User, Auth, Vault) und sollte nicht direkt über MCP angesprochen werden.
 
 Siehe auch: `docs/04_knowledge/mcp-setup.md` im Boilerplate
 

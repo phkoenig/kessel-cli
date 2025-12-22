@@ -335,5 +335,68 @@ describe("Schema-Name-Generierung", () => {
   })
 })
 
+// ============================================================================
+// MCP CONFIG TESTS
+// ============================================================================
+
+describe("MCP-Konfiguration", () => {
+  test("MCP Server Name wird korrekt generiert", () => {
+    const schemaName = "mein_projekt"
+    const mcpServerName = `supabase_DEV_${schemaName}`
+    
+    expect(mcpServerName).toBe("supabase_DEV_mein_projekt")
+  })
+  
+  test("MCP URL wird korrekt formatiert", () => {
+    const projectRef = "jpmhwyjiuodsvjowddsm"
+    const mcpUrl = `https://mcp.supabase.com/mcp?project_ref=${projectRef}`
+    
+    expect(mcpUrl).toContain("mcp.supabase.com")
+    expect(mcpUrl).toContain(projectRef)
+  })
+  
+  test("Project Ref wird aus URL extrahiert", () => {
+    const devDbUrl = "https://jpmhwyjiuodsvjowddsm.supabase.co"
+    const projectRef = new URL(devDbUrl).hostname.split(".")[0]
+    
+    expect(projectRef).toBe("jpmhwyjiuodsvjowddsm")
+  })
+  
+  test("MCP-Konfiguration Struktur ist korrekt", () => {
+    const schemaName = "test_app"
+    const projectRef = "jpmhwyjiuodsvjowddsm"
+    
+    const mcpConfig = {
+      mcpServers: {
+        [`supabase_DEV_${schemaName}`]: {
+          type: "http",
+          url: `https://mcp.supabase.com/mcp?project_ref=${projectRef}`
+        }
+      }
+    }
+    
+    expect(mcpConfig.mcpServers).toBeDefined()
+    expect(mcpConfig.mcpServers[`supabase_DEV_${schemaName}`]).toBeDefined()
+    expect(mcpConfig.mcpServers[`supabase_DEV_${schemaName}`].type).toBe("http")
+    expect(mcpConfig.mcpServers[`supabase_DEV_${schemaName}`].url).toContain(projectRef)
+  })
+  
+  test("Existierende Supabase MCPs werden erkannt", () => {
+    const mcpServers = {
+      "BASE_supabase_KESSEL": { type: "http", url: "..." },
+      "supabase_old": { type: "http", url: "..." },
+      "BASE_context7": { command: "npx", args: [] },
+      "BASE_shadcn": { command: "npx", args: [] },
+    }
+    
+    const supabaseKeys = Object.keys(mcpServers)
+      .filter(key => key.toLowerCase().includes("supabase"))
+    
+    expect(supabaseKeys).toHaveLength(2)
+    expect(supabaseKeys).toContain("BASE_supabase_KESSEL")
+    expect(supabaseKeys).toContain("supabase_old")
+  })
+})
+
 console.log("\n✅ Alle INFRA-DB + DEV-DB Tests abgeschlossen\n")
 

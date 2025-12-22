@@ -55,9 +55,17 @@ export function expect(actual) {
         throw new Error(`Expected ${JSON.stringify(expected)}, but got ${JSON.stringify(actual)}`)
       }
     },
-    toContain(substring) {
-      if (!actual.includes(substring)) {
-        throw new Error(`Expected "${actual}" to contain "${substring}"`)
+    toContain(item) {
+      if (Array.isArray(actual)) {
+        if (!actual.includes(item)) {
+          throw new Error(`Expected array to contain "${item}"`)
+        }
+      } else if (typeof actual === 'string') {
+        if (!actual.includes(item)) {
+          throw new Error(`Expected "${actual}" to contain "${item}"`)
+        }
+      } else {
+        throw new Error(`toContain() expects string or array, got ${typeof actual}`)
       }
     },
     toMatch(regex) {

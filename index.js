@@ -2385,6 +2385,85 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
     }
 
     // ========================================================================
+    // PHASE 5.5: MCP-Konfiguration aktualisieren
+    // ========================================================================
+    
+    updateProgress(progressBar, 85, "Aktualisiere MCP-Konfiguration...")
+    console.log(chalk.blue("\n🔧 Aktualisiere Cursor MCP-Konfiguration..."))
+    
+    const mcpConfigPath = path.join(projectPath, ".cursor", "mcp.json")
+    try {
+      if (fs.existsSync(mcpConfigPath)) {
+        const mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, "utf-8"))
+        
+        // Finde und entferne alle existierenden Supabase MCP Server
+        const existingSupabaseKeys = Object.keys(mcpConfig.mcpServers || {})
+          .filter(key => key.toLowerCase().includes("supabase"))
+        
+        for (const key of existingSupabaseKeys) {
+          delete mcpConfig.mcpServers[key]
+          debug(`Entferne existierenden Supabase MCP: ${key}`)
+        }
+        
+        // Extrahiere DEV-DB Project Ref aus URL
+        const devDbProjectRef = config.devDb?.projectRef || 
+          (devDbUrl ? new URL(devDbUrl).hostname.split(".")[0] : null)
+        
+        if (devDbProjectRef) {
+          // Füge neuen Supabase MCP hinzu, der auf DEV-DB zeigt
+          const mcpServerName = `supabase_DEV_${schemaName}`
+          mcpConfig.mcpServers[mcpServerName] = {
+            type: "http",
+            url: `https://mcp.supabase.com/mcp?project_ref=${devDbProjectRef}`
+          }
+          
+          // Schreibe aktualisierte Konfiguration
+          fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2))
+          
+          console.log(chalk.green(`✓ MCP-Konfiguration aktualisiert`))
+          console.log(chalk.dim(`   Server: ${mcpServerName}`))
+          console.log(chalk.dim(`   DEV-DB: ${devDbProjectRef}`))
+          console.log(chalk.dim(`   → Cursor MCP zeigt jetzt auf DEV-DB für Entwicklung`))
+        } else {
+          console.log(chalk.yellow("⚠️  DEV-DB Project Ref nicht gefunden, MCP nicht aktualisiert"))
+        }
+      } else {
+        // Erstelle .cursor Verzeichnis falls nicht vorhanden
+        const cursorDir = path.join(projectPath, ".cursor")
+        if (!fs.existsSync(cursorDir)) {
+          fs.mkdirSync(cursorDir, { recursive: true })
+        }
+        
+        // Extrahiere DEV-DB Project Ref
+        const devDbProjectRef = config.devDb?.projectRef || 
+          (devDbUrl ? new URL(devDbUrl).hostname.split(".")[0] : null)
+        
+        if (devDbProjectRef) {
+          // Erstelle neue MCP-Konfiguration
+          const mcpServerName = `supabase_DEV_${schemaName}`
+          const newMcpConfig = {
+            mcpServers: {
+              [mcpServerName]: {
+                type: "http",
+                url: `https://mcp.supabase.com/mcp?project_ref=${devDbProjectRef}`
+              }
+            }
+          }
+          
+          fs.writeFileSync(mcpConfigPath, JSON.stringify(newMcpConfig, null, 2))
+          console.log(chalk.green(`✓ MCP-Konfiguration erstellt`))
+          console.log(chalk.dim(`   Server: ${mcpServerName}`))
+          console.log(chalk.dim(`   DEV-DB: ${devDbProjectRef}`))
+        } else {
+          console.log(chalk.yellow("⚠️  Keine MCP-Konfiguration erstellt (DEV-DB nicht konfiguriert)"))
+        }
+      }
+    } catch (mcpError) {
+      console.log(chalk.yellow(`⚠️  MCP-Konfiguration konnte nicht aktualisiert werden: ${mcpError.message}`))
+      debug(`MCP Error: ${mcpError.stack}`)
+    }
+
+    // ========================================================================
     // PHASE 6: Finalisierung (80-100%)
     // ========================================================================
     
