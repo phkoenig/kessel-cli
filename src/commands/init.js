@@ -32,19 +32,45 @@ export async function runInitCommand(projectNameArg, options) {
     renderPhaseHeader(1, "PRE-CHECKS", 20)
     const ctx = {}
     
-    // Führe Pre-Checks aus
-    try {
-      const precheckTasks = createPrecheckTasks(config)
-      await precheckTasks.run(ctx)
-      console.log(chalk.green("\n✓ Pre-Checks abgeschlossen\n"))
-    } catch (error) {
-      console.error(chalk.red.bold("\n❌ Pre-Check Fehler:"))
-      console.error(chalk.red(error.message))
-      if (verbose) {
-        console.error(chalk.dim(error.stack))
+    // Führe Pre-Checks manuell aus mit eigener Ausgabe
+    const precheckTasks = createPrecheckTasks(config)
+    const tasks = precheckTasks.listr.tasks || precheckTasks.tasks || []
+    
+    for (const taskDef of tasks) {
+      // Prüfe ob Task übersprungen werden soll
+      if (taskDef.skip && typeof taskDef.skip === 'function' && taskDef.skip()) {
+        console.log(chalk.dim(`  ⏭  ${taskDef.title} (übersprungen)`))
+        continue
       }
-      throw error
+      
+      // Zeige Task-Start
+      process.stdout.write(chalk.cyan(`  ⏳ ${taskDef.title}...`))
+      
+      try {
+        // Erstelle Mock-Task-Objekt für Task-Funktion
+        const mockTask = {
+          title: taskDef.title,
+          output: '',
+          skip: () => false,
+        }
+        
+        // Führe Task aus
+        await taskDef.task(ctx, mockTask)
+        
+        // Zeige Erfolg
+        process.stdout.write(chalk.green(` ✓\n`))
+      } catch (error) {
+        // Zeige Fehler
+        process.stdout.write(chalk.red(` ✗\n`))
+        console.error(chalk.red(`    Fehler: ${error.message}`))
+        if (verbose) {
+          console.error(chalk.dim(error.stack))
+        }
+        throw error
+      }
     }
+    
+    console.log(chalk.green("\n✓ Pre-Checks abgeschlossen\n"))
     
     // Phase 2: Setup
     renderPhaseHeader(2, "SETUP", 40)

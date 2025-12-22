@@ -10,10 +10,10 @@ import { createClient } from "@supabase/supabase-js"
 /**
  * Erstellt listr2 Tasks für Phase 1: Pre-Checks
  * @param {Object} config - KesselConfig-Objekt
- * @returns {Listr} Listr-Instanz
+ * @returns {Object} Objekt mit tasks-Array und listr-Instanz
  */
 export function createPrecheckTasks(config) {
-  return new Listr([
+  const taskDefinitions = [
     {
       title: "GitHub CLI",
       task: async (ctx, task) => {
@@ -113,17 +113,22 @@ export function createPrecheckTasks(config) {
         }
       },
     },
-  ], {
-    concurrent: false,
-    renderer: 'verbose',
-    rendererOptions: {
-      collapseSubtasks: false,
-      showTimer: false,
-      clearOutput: false,
-      formatOutput: 'default',
-      showSubtasks: true,
-      collapse: false,
-    },
-  })
+  ]
+  
+  return {
+    tasks: taskDefinitions,
+    listr: new Listr(taskDefinitions, {
+      concurrent: false,
+      renderer: 'verbose',
+      rendererOptions: {
+        collapseSubtasks: false,
+        showTimer: false,
+        clearOutput: false,
+        formatOutput: 'default',
+        showSubtasks: true,
+        collapse: false,
+      },
+    }),
+  }
 }
 
