@@ -5,10 +5,10 @@ import chalk from "chalk"
 /**
  * Erstellt listr2 Tasks für Phase 2: Setup
  * @param {Object} config - KesselConfig-Objekt
- * @returns {Listr} Listr-Instanz
+ * @returns {Object} Objekt mit tasks-Array und listr-Instanz
  */
 export function createSetupTasks(config) {
-  return new Listr([
+  const taskDefinitions = [
     {
       title: "Schema-Name generieren",
       task: (ctx, task) => {
@@ -52,14 +52,20 @@ export function createSetupTasks(config) {
         }
       },
     },
-  ], {
-    concurrent: false,
-    rendererOptions: {
-      collapseSubtasks: false,
-      showTimer: false,
-      clearOutput: false,
-      formatOutput: 'default',
-    },
-  })
+  ]
+  
+  return {
+    tasks: taskDefinitions,
+    listr: new Listr(taskDefinitions, {
+      concurrent: false,
+      renderer: 'verbose',
+      rendererOptions: {
+        collapseSubtasks: false,
+        showTimer: false,
+        clearOutput: false,
+        formatOutput: 'default',
+      },
+    }),
+  }
 }
 

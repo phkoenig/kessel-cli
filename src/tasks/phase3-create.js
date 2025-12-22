@@ -12,10 +12,10 @@ import { fetchAnonKeyFromSupabase, fetchServiceRoleKeyFromSupabase } from "../ut
  * @param {Object} config - KesselConfig-Objekt
  * @param {Object} ctx - Context mit githubToken, packageManager, etc.
  * @param {string} projectPath - Pfad zum Projekt-Verzeichnis
- * @returns {Listr} Listr-Instanz
+ * @returns {Object} Objekt mit tasks-Array und listr-Instanz
  */
 export function createProjectTasks(config, ctx, projectPath) {
-  return new Listr([
+  const taskDefinitions = [
     {
       title: "1/11: GitHub Repository erstellen",
       task: async (taskCtx, task) => {
@@ -292,14 +292,20 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
         task.title = "11/11: MCP-Konfiguration aktualisiert ✓"
       },
     },
-  ], {
-    concurrent: false,
-    rendererOptions: {
-      collapseSubtasks: false,
-      showTimer: false,
-      clearOutput: false,
-      formatOutput: 'default',
-    },
-  })
+  ]
+  
+  return {
+    tasks: taskDefinitions,
+    listr: new Listr(taskDefinitions, {
+      concurrent: false,
+      renderer: 'verbose',
+      rendererOptions: {
+        collapseSubtasks: false,
+        showTimer: false,
+        clearOutput: false,
+        formatOutput: 'default',
+      },
+    }),
+  }
 }
 

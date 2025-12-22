@@ -75,14 +75,70 @@ export async function runInitCommand(projectNameArg, options) {
     // Phase 2: Setup
     renderPhaseHeader(2, "SETUP", 40)
     const setupTasks = createSetupTasks(config)
-    await setupTasks.run(ctx)
-    console.log(chalk.green("✓ Setup abgeschlossen\n"))
+    const setupTaskList = setupTasks.tasks || []
+    
+    for (const taskDef of setupTaskList) {
+      if (taskDef.skip && typeof taskDef.skip === 'function' && taskDef.skip()) {
+        console.log(chalk.dim(`  ⏭  ${taskDef.title} (übersprungen)`))
+        continue
+      }
+      
+      process.stdout.write(chalk.cyan(`  ⏳ ${taskDef.title}...`))
+      
+      try {
+        const mockTask = {
+          title: taskDef.title,
+          output: '',
+          skip: () => false,
+        }
+        
+        await taskDef.task(ctx, mockTask)
+        process.stdout.write(chalk.green(` ✓\n`))
+      } catch (error) {
+        process.stdout.write(chalk.red(` ✗\n`))
+        console.error(chalk.red(`    Fehler: ${error.message}`))
+        if (verbose) {
+          console.error(chalk.dim(error.stack))
+        }
+        throw error
+      }
+    }
+    
+    console.log(chalk.green("\n✓ Setup abgeschlossen\n"))
     
     // Phase 3: Create
     renderPhaseHeader(3, "PROJEKT-ERSTELLUNG", 60)
     const createTasks = createProjectTasks(config, ctx, projectPath)
-    await createTasks.run(ctx)
-    console.log(chalk.green("✓ Projekt-Erstellung abgeschlossen\n"))
+    const createTaskList = createTasks.tasks || []
+    
+    for (const taskDef of createTaskList) {
+      if (taskDef.skip && typeof taskDef.skip === 'function' && taskDef.skip()) {
+        console.log(chalk.dim(`  ⏭  ${taskDef.title} (übersprungen)`))
+        continue
+      }
+      
+      process.stdout.write(chalk.cyan(`  ⏳ ${taskDef.title}...`))
+      
+      try {
+        const mockTask = {
+          title: taskDef.title,
+          output: '',
+          skip: () => false,
+        }
+        
+        await taskDef.task(ctx, mockTask)
+        process.stdout.write(chalk.green(` ✓\n`))
+      } catch (error) {
+        process.stdout.write(chalk.red(` ✗\n`))
+        console.error(chalk.red(`    Fehler: ${error.message}`))
+        if (verbose) {
+          console.error(chalk.dim(error.stack))
+        }
+        throw error
+      }
+    }
+    
+    console.log(chalk.green("\n✓ Projekt-Erstellung abgeschlossen\n"))
     
     // Erfolg
     console.log(chalk.green.bold(`\n✨ Projekt "${config.projectName}" erfolgreich erstellt!\n`))
