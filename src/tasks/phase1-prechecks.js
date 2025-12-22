@@ -18,10 +18,10 @@ export function createPrecheckTasks(config) {
       title: "GitHub CLI",
       task: async (ctx, task) => {
         try {
-          ctx.githubToken = await checkGitHubCLI(null)
+          ctx.githubToken = await checkGitHubCLI(null, true) // silent = true
           task.title = "GitHub CLI ✓"
         } catch (error) {
-          task.title = "GitHub CLI ✗"
+          task.title = `GitHub CLI ✗ (${error.message})`
           throw error
         }
       },
@@ -30,7 +30,7 @@ export function createPrecheckTasks(config) {
       title: "Vercel CLI",
       task: async (ctx, task) => {
         try {
-          await checkVercelCLI(null)
+          await checkVercelCLI(null, true) // silent = true
           ctx.vercelInstalled = true
           task.title = "Vercel CLI ✓"
         } catch (error) {
@@ -44,10 +44,10 @@ export function createPrecheckTasks(config) {
       title: "Supabase CLI",
       task: async (ctx, task) => {
         try {
-          await checkSupabaseCLI(null)
+          await checkSupabaseCLI(null, true) // silent = true
           task.title = "Supabase CLI ✓"
         } catch (error) {
-          task.title = "Supabase CLI ✗"
+          task.title = `Supabase CLI ✗ (${error.message})`
           throw error
         }
       },
@@ -56,10 +56,10 @@ export function createPrecheckTasks(config) {
       title: "Package Manager",
       task: async (ctx, task) => {
         try {
-          ctx.packageManager = await checkPackageManager(null)
+          ctx.packageManager = await checkPackageManager(null, true) // silent = true
           task.title = `Package Manager: ${ctx.packageManager.name} ✓`
         } catch (error) {
-          task.title = "Package Manager ✗"
+          task.title = `Package Manager ✗ (${error.message})`
           throw error
         }
       },
@@ -116,7 +116,9 @@ export function createPrecheckTasks(config) {
     concurrent: false,
     rendererOptions: {
       collapseSubtasks: false,
-      showTimer: true,
+      showTimer: false,
+      clearOutput: false,
+      formatOutput: 'default',
     },
   })
 }

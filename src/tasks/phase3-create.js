@@ -296,7 +296,9 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
     concurrent: false,
     rendererOptions: {
       collapseSubtasks: false,
-      showTimer: true,
+      showTimer: false,
+      clearOutput: false,
+      formatOutput: 'default',
     },
   })
 }

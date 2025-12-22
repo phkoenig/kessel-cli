@@ -56,7 +56,9 @@ export function createSetupTasks(config) {
     concurrent: false,
     rendererOptions: {
       collapseSubtasks: false,
-      showTimer: true,
+      showTimer: false,
+      clearOutput: false,
+      formatOutput: 'default',
     },
   })
 }

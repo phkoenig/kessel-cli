@@ -131,7 +131,7 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
   
   if (profile) {
     profile = migrateProfile(profile)
-    console.log(chalk.cyan(`📋 ${existing.source === 'local' ? 'Lokales' : 'Systemweites'} Profil gefunden: ${existing.username}`))
+    // Keine Debug-Ausgabe hier - wird später im Wizard angezeigt
   }
   
   // 1. Username
