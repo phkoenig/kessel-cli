@@ -25,6 +25,7 @@ export function createPrecheckTasks(config) {
           throw error
         }
       },
+      enabled: () => true,
     },
     {
       title: "Vercel CLI",

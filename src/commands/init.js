@@ -33,9 +33,12 @@ export async function runInitCommand(projectNameArg, options) {
     const ctx = {}
     const precheckTasks = createPrecheckTasks(config)
     
+    // Zeige Fortschritt während der Ausführung
+    console.log(chalk.dim("Führe Pre-Checks aus...\n"))
+    
     try {
       await precheckTasks.run(ctx)
-      console.log(chalk.green("✓ Pre-Checks abgeschlossen\n"))
+      console.log(chalk.green("\n✓ Pre-Checks abgeschlossen\n"))
     } catch (error) {
       console.error(chalk.red.bold("\n❌ Pre-Check Fehler:"))
       console.error(chalk.red(error.message))
