@@ -36,12 +36,25 @@ export async function runInitCommand(projectNameArg, options) {
     try {
       const precheckTasks = createPrecheckTasks(config)
       
-      // Zeige Fortschritt während der Ausführung
-      precheckTasks.on('SUBTASK', (task) => {
-        process.stdout.write(chalk.cyan(`  → ${task.title}\n`))
-      })
+      // Zeige jeden Task während der Ausführung
+      const tasks = precheckTasks.tasks
+      for (const task of tasks) {
+        if (task.enabled && !task.enabled()) continue
+        if (task.skip && task.skip()) {
+          console.log(chalk.dim(`  ⏭  ${task.title} (übersprungen)`))
+          continue
+        }
+        
+        process.stdout.write(chalk.cyan(`  ⏳ ${task.title}...`))
+        try {
+          await task.task(ctx, task)
+          process.stdout.write(chalk.green(` ✓\n`))
+        } catch (error) {
+          process.stdout.write(chalk.red(` ✗\n`))
+          throw error
+        }
+      }
       
-      await precheckTasks.run(ctx)
       console.log(chalk.green("\n✓ Pre-Checks abgeschlossen\n"))
     } catch (error) {
       console.error(chalk.red.bold("\n❌ Pre-Check Fehler:"))
