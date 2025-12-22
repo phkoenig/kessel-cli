@@ -3,12 +3,14 @@
   "version": "2.0.0",
   "description": "CLI für die Kessel Boilerplate - Erstellt neue Next.js-Projekte mit Supabase & ShadCN UI",
   "type": "module",
-  "main": "index.js",
+  "main": "dist/cli.mjs",
   "bin": {
-    "kessel": "./index.js"
+    "kessel": "./dist/cli.mjs"
   },
   "scripts": {
-    "start": "node index.js",
+    "build": "tsup && node scripts/add-shebang.mjs",
+    "dev": "tsup --watch",
+    "start": "node dist/cli.mjs",
     "test": "node tests/run-all.mjs",
     "test:all": "node tests/run-all.mjs",
     "test:profile": "node tests/profile.test.mjs",
@@ -30,8 +32,7 @@
     "url": "https://github.com/phkoenig/kessel-cli.git"
   },
   "files": [
-    "index.js",
-    "src/",
+    "dist/",
     "lib/",
     "config.example.json",
     "README.md"
@@ -45,16 +46,16 @@
     "enquirer": "^2.4.1",
     "ink": "^6.6.0",
     "ink-box": "^2.0.0",
-    "ink-confirm-input": "^2.0.0",
     "ink-select-input": "^6.2.0",
     "ink-spinner": "^5.0.0",
-    "ink-text-input": "^6.0.0",
+    "ink-text-input": "6.0.0",
     "inquirer": "^12.11.1",
     "listr2": "^8.0.0",
     "octokit": "^5.0.5",
     "react": "^19.2.3"
   },
   "devDependencies": {
-    "esbuild-register": "^3.6.0"
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   }
 }

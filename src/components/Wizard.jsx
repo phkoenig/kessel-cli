@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { Box, Text } from 'ink'
 import TextInput from 'ink-text-input'
 import SelectInput from 'ink-select-input'
-import ConfirmInput from 'ink-confirm-input'
-import { Spinner } from 'ink-spinner'
+// ConfirmInput wird durch einfache TextInput + Enter-Validation ersetzt
+import Spinner from 'ink-spinner'
 
 /**
  * Wizard-Komponente für die Eingabe aller benötigten Informationen
@@ -338,13 +338,18 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   }
 
   if (step === 6) {
+    const yesNoOptions = [
+      { label: 'Ja', value: true },
+      { label: 'Nein', value: false },
+    ]
     return (
       <Box flexDirection="column">
         <Text color="cyan" bold>Dependencies automatisch installieren?</Text>
-        <ConfirmInput
-          defaultValue={true}
-          onSubmit={(confirmed) => {
-            setAutoInstallDeps(confirmed)
+        <SelectInput
+          items={yesNoOptions}
+          initialSelectedIndex={0}
+          onSelect={(item) => {
+            setAutoInstallDeps(item.value)
             setStep(7)
           }}
         />
@@ -353,13 +358,18 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   }
 
   if (step === 7) {
+    const yesNoOptions = [
+      { label: 'Ja', value: true },
+      { label: 'Nein', value: false },
+    ]
     return (
       <Box flexDirection="column">
         <Text color="cyan" bold>Mit Vercel verknüpfen?</Text>
-        <ConfirmInput
-          defaultValue={false}
-          onSubmit={(confirmed) => {
-            setLinkVercel(confirmed)
+        <SelectInput
+          items={yesNoOptions}
+          initialSelectedIndex={1}
+          onSelect={(item) => {
+            setLinkVercel(item.value)
             setStep(8)
           }}
         />
@@ -368,13 +378,18 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   }
 
   if (step === 8) {
+    const yesNoOptions = [
+      { label: 'Ja', value: true },
+      { label: 'Nein', value: false },
+    ]
     return (
       <Box flexDirection="column">
         <Text color="cyan" bold>Initial Commit erstellen?</Text>
-        <ConfirmInput
-          defaultValue={true}
-          onSubmit={(confirmed) => {
-            setDoInitialCommit(confirmed)
+        <SelectInput
+          items={yesNoOptions}
+          initialSelectedIndex={0}
+          onSelect={(item) => {
+            setDoInitialCommit(item.value)
             setStep(9)
           }}
         />
@@ -383,13 +398,19 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   }
 
   if (step === 9) {
+    const yesNoOptions = [
+      { label: 'Ja', value: true },
+      { label: 'Nein', value: false },
+    ]
+    const defaultIndex = (createGithub !== 'none' && doInitialCommit) ? 0 : 1
     return (
       <Box flexDirection="column">
         <Text color="cyan" bold>Änderungen zu GitHub pushen?</Text>
-        <ConfirmInput
-          defaultValue={createGithub !== 'none' && doInitialCommit}
-          onSubmit={(confirmed) => {
-            setDoPush(confirmed)
+        <SelectInput
+          items={yesNoOptions}
+          initialSelectedIndex={defaultIndex}
+          onSelect={(item) => {
+            setDoPush(item.value)
             handleComplete()
           }}
         />

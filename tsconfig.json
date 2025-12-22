@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "jsx": "react",
+    "jsxFactory": "React.createElement",
+    "jsxFragmentFactory": "React.Fragment",
+    "module": "ESNext",
+    "target": "ES2022",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "tsx": {
+    "esbuildOptions": {
+      "loader": {
+        ".js": "jsx"
+      },
+      "platform": "node",
+      "format": "esm",
+      "external": ["*"]
+    }
+  }
+}
+

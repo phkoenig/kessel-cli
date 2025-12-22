@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Box, Text } from 'ink'
-import { Spinner } from 'ink-spinner'
+import Spinner from 'ink-spinner'
 
 /**
  * Task-Liste Komponente

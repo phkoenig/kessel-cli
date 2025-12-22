@@ -48,7 +48,7 @@ program
   .argument("[project-name]", "Name des Projekts (optional)")
   .option("-v, --verbose", "Detaillierte Debug-Ausgaben", false)
   .action(async (projectNameArg, options) => {
-    const { runInitCommand } = await import("./commands/init.js")
+    const { runInitCommand } = await import("./commands/init.jsx")
     await runInitCommand(projectNameArg, options)
   })
 
