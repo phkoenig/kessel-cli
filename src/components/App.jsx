@@ -34,29 +34,29 @@ export function App({ projectNameArg, verbose, onComplete, onError }) {
   // Phase 1: Pre-Checks
   useEffect(() => {
     if (phase === 'prechecks' && config) {
-      const precheckTasks = createPrecheckTasks(config)
+      const precheckTasks = createPrecheckTasks(config, { verbose })
       setTasks(precheckTasks.tasks || [])
       setCurrentTaskIndex(0)
     }
-  }, [phase, config])
+  }, [phase, config, verbose])
 
   // Phase 2: Setup
   useEffect(() => {
     if (phase === 'setup' && config) {
-      const setupTasks = createSetupTasks(config)
+      const setupTasks = createSetupTasks(config, { verbose })
       setTasks(setupTasks.tasks || [])
       setCurrentTaskIndex(0)
     }
-  }, [phase, config])
+  }, [phase, config, verbose])
 
   // Phase 3: Create
   useEffect(() => {
     if (phase === 'create' && config && projectPath) {
-      const createTasks = createProjectTasks(config, ctx, projectPath)
+      const createTasks = createProjectTasks(config, ctx, projectPath, { verbose })
       setTasks(createTasks.tasks || [])
       setCurrentTaskIndex(0)
     }
-  }, [phase, config, ctx, projectPath])
+  }, [phase, config, ctx, projectPath, verbose])
 
   const handleTasksComplete = () => {
     if (phase === 'prechecks') {
@@ -96,6 +96,7 @@ export function App({ projectNameArg, verbose, onComplete, onError }) {
             tasks={tasks}
             ctx={ctx}
             setCtx={setCtx}
+            verbose={verbose}
             onComplete={handleTasksComplete}
             onError={handleError}
           />
@@ -109,6 +110,7 @@ export function App({ projectNameArg, verbose, onComplete, onError }) {
             tasks={tasks}
             ctx={ctx}
             setCtx={setCtx}
+            verbose={verbose}
             onComplete={handleTasksComplete}
             onError={handleError}
           />
@@ -122,6 +124,7 @@ export function App({ projectNameArg, verbose, onComplete, onError }) {
             tasks={tasks}
             ctx={ctx}
             setCtx={setCtx}
+            verbose={verbose}
             onComplete={handleTasksComplete}
             onError={handleError}
           />

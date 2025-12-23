@@ -174,8 +174,9 @@ export async function listSupabaseProjects(debugFn) {
         continue
       }
 
-      if ((inTable || headerFound) && trimmed.includes("│") && !trimmed.includes("LINKED")) {
-        const parts = trimmed.split("│").map((p) => p.trim())
+      // Unterstütze beide Pipe-Varianten: │ (Box-Drawing) und | (ASCII)
+      if ((inTable || headerFound) && (trimmed.includes("│") || trimmed.includes("|")) && !trimmed.includes("LINKED")) {
+        const parts = trimmed.split(/[│|]/).map((p) => p.trim())
         if (parts.length >= 4) {
           const referenceId = parts[2] || ""
           const name = parts[3] || ""
@@ -246,7 +247,8 @@ export async function fetchAnonKeyFromSupabase(projectRef, debugFn) {
       for (const line of lines) {
         const trimmed = line.trim()
         if (trimmed.includes("anon") || trimmed.includes("public")) {
-          const parts = trimmed.split("│").map((p) => p.trim())
+          // Unterstütze beide Pipe-Varianten: │ (Box-Drawing) und | (ASCII)
+          const parts = trimmed.split(/[│|]/).map((p) => p.trim())
           if (parts.length >= 2) {
             const keyName = parts[0].toLowerCase()
             const keyValue = parts[1]
@@ -323,7 +325,8 @@ export async function fetchServiceRoleKeyFromSupabase(projectRef, debugFn) {
     for (const line of lines) {
       const trimmed = line.trim()
       if (trimmed.includes("service_role")) {
-        const parts = trimmed.split("│").map((p) => p.trim())
+        // Unterstütze beide Pipe-Varianten: │ (Box-Drawing) und | (ASCII)
+        const parts = trimmed.split(/[│|]/).map((p) => p.trim())
         if (parts.length >= 2) {
           const keyName = parts[0].toLowerCase()
           const keyValue = parts[1].replace(/\x1b\[[0-9;]*m/g, '').trim()

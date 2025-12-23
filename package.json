@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/cli.mjs",
   "bin": {
-    "kessel": "./dist/cli.mjs"
+    "kessel": "dist/cli.mjs"
   },
   "scripts": {
     "build": "tsup && node scripts/add-shebang.mjs",
@@ -16,7 +16,8 @@
     "test:profile": "node tests/profile.test.mjs",
     "test:infra-dev": "node tests/infra-dev-db.test.mjs",
     "test:framework": "node tests/test-framework.mjs",
-    "test:project": "node tests/test-project-creation.mjs"
+    "test:project": "node tests/test-project-creation.mjs",
+    "test:validation": "node tests/url-jwt-validation.test.mjs"
   },
   "keywords": [
     "nextjs",

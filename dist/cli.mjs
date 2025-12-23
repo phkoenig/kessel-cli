@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import React4, { useState, useEffect } from 'react';
-import { render, Box, Text } from 'ink';
+import { render, Box, Text, useStdin } from 'ink';
 import Spinner2 from 'ink-spinner';
 import fs5 from 'fs';
 import path5 from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import chalk10 from 'chalk';
+import chalk11 from 'chalk';
 import { execSync } from 'child_process';
 import enquirer from 'enquirer';
 import TextInput from 'ink-text-input';
@@ -47,9 +47,15 @@ var init_PhaseHeader = __esm({
   "src/components/PhaseHeader.jsx"() {
   }
 });
-function TaskList({ tasks, ctx, setCtx, onComplete, onError }) {
+function TaskList({ tasks, ctx, setCtx, verbose, onComplete, onError }) {
   const [taskStates, setTaskStates] = useState({});
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [debugLogs, setDebugLogs] = useState([]);
+  const debug = verbose ? (message) => {
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString().split("T")[1].split(".")[0];
+    setDebugLogs((prev) => [...prev.slice(-10), `[${timestamp}] ${message}`]);
+  } : () => {
+  };
   useEffect(() => {
     if (tasks.length === 0) {
       return;
@@ -57,7 +63,9 @@ function TaskList({ tasks, ctx, setCtx, onComplete, onError }) {
     const executeTasks = async () => {
       for (let i = 0; i < tasks.length; i++) {
         const taskDef = tasks[i];
+        debug(`\u25B6 Start: ${taskDef.title}`);
         if (taskDef.skip && typeof taskDef.skip === "function" && taskDef.skip()) {
+          debug(`\u23ED \xDCbersprungen: ${taskDef.title}`);
           setTaskStates((prev) => ({
             ...prev,
             [i]: { status: "skipped", message: "\xFCbersprungen" }
@@ -73,16 +81,23 @@ function TaskList({ tasks, ctx, setCtx, onComplete, onError }) {
           const mockTask = {
             title: taskDef.title,
             output: "",
-            skip: () => false
+            skip: () => false,
+            debug
+            // Debug-Funktion an Task übergeben
           };
-          const taskCtx = { ...ctx };
+          const taskCtx = { ...ctx, debug };
+          debug(`\u2699 Ausf\xFChrung: ${taskDef.title}`);
+          const startTime = Date.now();
           await taskDef.task(taskCtx, mockTask);
+          const duration = Date.now() - startTime;
+          debug(`\u2713 Fertig: ${taskDef.title} (${duration}ms)`);
           setCtx((prevCtx) => ({ ...prevCtx, ...taskCtx }));
           setTaskStates((prev) => ({
             ...prev,
             [i]: { status: "completed" }
           }));
         } catch (error) {
+          debug(`\u2717 Fehler: ${taskDef.title} - ${error.message}`);
           setTaskStates((prev) => ({
             ...prev,
             [i]: { status: "error", error: error.message }
@@ -117,7 +132,7 @@ function TaskList({ tasks, ctx, setCtx, onComplete, onError }) {
       return /* @__PURE__ */ React4.createElement(Box, { key: index, flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "red" }, `  \u2717 ${taskDef.title}`), /* @__PURE__ */ React4.createElement(Text, { color: "red" }, `    Fehler: ${state.error}`));
     }
     return null;
-  }));
+  }), verbose && debugLogs.length > 0 && /* @__PURE__ */ React4.createElement(Box, { flexDirection: "column", marginTop: 1, borderStyle: "single", borderColor: "gray", paddingX: 1 }, /* @__PURE__ */ React4.createElement(Text, { color: "gray", bold: true }, "\u{1F50D} Debug-Log:"), debugLogs.map((log, i) => /* @__PURE__ */ React4.createElement(Text, { key: i, color: "gray", dimColor: true }, log))));
 }
 var init_TaskList = __esm({
   "src/components/TaskList.jsx"() {
@@ -200,7 +215,7 @@ function loadConfig() {
         }
       };
     } catch (error) {
-      console.warn(chalk10.yellow("\u26A0\uFE0F  Konfigurationsdatei konnte nicht geladen werden, verwende Standardwerte"));
+      console.warn(chalk11.yellow("\u26A0\uFE0F  Konfigurationsdatei konnte nicht geladen werden, verwende Standardwerte"));
     }
   }
   return {
@@ -222,11 +237,11 @@ function loadServiceRoleKey() {
         return match[1].trim();
       }
     } catch (error) {
-      console.error(chalk10.red(`\u274C Fehler beim Lesen der .env Datei: ${error.message}`));
+      console.error(chalk11.red(`\u274C Fehler beim Lesen der .env Datei: ${error.message}`));
       return null;
     }
   } else {
-    console.error(chalk10.red(`\u274C .env Datei nicht gefunden: ${BOILERPLATE_ENV_PATH}`));
+    console.error(chalk11.red(`\u274C .env Datei nicht gefunden: ${BOILERPLATE_ENV_PATH}`));
     return null;
   }
   return null;
@@ -260,29 +275,29 @@ function maskSecret(secret) {
 }
 function debugLog(message, data = null, verbose = false) {
   if (!verbose) return;
-  console.log(chalk10.dim(`[DEBUG] ${message}`));
+  console.log(chalk11.dim(`[DEBUG] ${message}`));
   if (data) {
     if (typeof data === "object") {
-      console.log(chalk10.dim(JSON.stringify(data, null, 2)));
+      console.log(chalk11.dim(JSON.stringify(data, null, 2)));
     } else {
-      console.log(chalk10.dim(String(data)));
+      console.log(chalk11.dim(String(data)));
     }
   }
 }
 function debugError(error, verbose = false) {
   if (!verbose) return;
-  console.error(chalk10.red.dim(`[DEBUG ERROR] ${error.message}`));
+  console.error(chalk11.red.dim(`[DEBUG ERROR] ${error.message}`));
   if (error.stack) {
-    console.error(chalk10.red.dim(error.stack));
+    console.error(chalk11.red.dim(error.stack));
   }
   if (error.code) {
-    console.error(chalk10.red.dim(`[DEBUG ERROR CODE] ${error.code}`));
+    console.error(chalk11.red.dim(`[DEBUG ERROR CODE] ${error.code}`));
   }
   if (error.details) {
-    console.error(chalk10.red.dim(`[DEBUG ERROR DETAILS] ${error.details}`));
+    console.error(chalk11.red.dim(`[DEBUG ERROR DETAILS] ${error.details}`));
   }
   if (error.hint) {
-    console.error(chalk10.red.dim(`[DEBUG ERROR HINT] ${error.hint}`));
+    console.error(chalk11.red.dim(`[DEBUG ERROR HINT] ${error.hint}`));
   }
 }
 var init_debug = __esm({
@@ -427,8 +442,8 @@ async function listSupabaseProjects(debugFn) {
         inTable = true;
         continue;
       }
-      if ((inTable || headerFound) && trimmed.includes("\u2502") && !trimmed.includes("LINKED")) {
-        const parts = trimmed.split("\u2502").map((p) => p.trim());
+      if ((inTable || headerFound) && (trimmed.includes("\u2502") || trimmed.includes("|")) && !trimmed.includes("LINKED")) {
+        const parts = trimmed.split(/[│|]/).map((p) => p.trim());
         if (parts.length >= 4) {
           const referenceId = parts[2] || "";
           const name = parts[3] || "";
@@ -488,7 +503,7 @@ async function fetchAnonKeyFromSupabase(projectRef, debugFn) {
       for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed.includes("anon") || trimmed.includes("public")) {
-          const parts = trimmed.split("\u2502").map((p) => p.trim());
+          const parts = trimmed.split(/[│|]/).map((p) => p.trim());
           if (parts.length >= 2) {
             const keyName = parts[0].toLowerCase();
             const keyValue = parts[1];
@@ -552,7 +567,7 @@ async function fetchServiceRoleKeyFromSupabase(projectRef, debugFn) {
     for (const line of lines) {
       const trimmed = line.trim();
       if (trimmed.includes("service_role")) {
-        const parts = trimmed.split("\u2502").map((p) => p.trim());
+        const parts = trimmed.split(/[│|]/).map((p) => p.trim());
         if (parts.length >= 2) {
           const keyName = parts[0].toLowerCase();
           const keyValue = parts[1].replace(/\x1b\[[0-9;]*m/g, "").trim();
@@ -790,26 +805,26 @@ async function runInitWizard(projectNameArg = null, projectRoot = null) {
   let serviceRoleKey = null;
   const tempServiceRoleKey = profile?.SUPABASE_SERVICE_ROLE_KEY || profile?.SUPABASE_VAULT_SERVICE_ROLE_KEY;
   if (tempServiceRoleKey && infraUrl) {
-    console.log(chalk10.blue("\u{1F50D} Versuche SERVICE_ROLE_KEY aus Vault zu holen..."));
+    console.log(chalk11.blue("\u{1F50D} Versuche SERVICE_ROLE_KEY aus Vault zu holen..."));
     serviceRoleKey = await fetchServiceRoleKeyFromVault(infraUrl, tempServiceRoleKey, (msg) => {
     });
     if (serviceRoleKey) {
-      console.log(chalk10.green("\u2713 SERVICE_ROLE_KEY aus Vault geholt"));
+      console.log(chalk11.green("\u2713 SERVICE_ROLE_KEY aus Vault geholt"));
     } else {
-      console.log(chalk10.yellow("\u26A0\uFE0F  Vault-Zugriff fehlgeschlagen, versuche Management API..."));
+      console.log(chalk11.yellow("\u26A0\uFE0F  Vault-Zugriff fehlgeschlagen, versuche Management API..."));
     }
   }
   if (!serviceRoleKey && infraProjectRef) {
     serviceRoleKey = await fetchServiceRoleKeyFromSupabase(infraProjectRef, (msg) => {
     });
     if (serviceRoleKey) {
-      console.log(chalk10.green("\u2713 SERVICE_ROLE_KEY \xFCber Management API geholt"));
+      console.log(chalk11.green("\u2713 SERVICE_ROLE_KEY \xFCber Management API geholt"));
     }
   }
   if (!serviceRoleKey) {
     serviceRoleKey = tempServiceRoleKey;
     if (serviceRoleKey) {
-      console.log(chalk10.dim("\u2139\uFE0F  Verwende SERVICE_ROLE_KEY aus Profil"));
+      console.log(chalk11.dim("\u2139\uFE0F  Verwende SERVICE_ROLE_KEY aus Profil"));
     }
   }
   if (!serviceRoleKey) {
@@ -908,7 +923,28 @@ var init_initWizard = __esm({
     init_supabase();
   }
 });
+function cleanUrl(url) {
+  if (!url) return "";
+  return url.replace(/[\r\n#]+/g, "").trim();
+}
+function extractProjectRefFromJwt(jwt) {
+  if (!jwt || typeof jwt !== "string") return null;
+  try {
+    const parts = jwt.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
+    return payload.ref || null;
+  } catch {
+    return null;
+  }
+}
+function isKeyForProject(serviceRoleKey, expectedProjectRef) {
+  if (!serviceRoleKey || !expectedProjectRef) return false;
+  const keyProjectRef = extractProjectRefFromJwt(serviceRoleKey);
+  return keyProjectRef === expectedProjectRef;
+}
 function Wizard({ projectNameArg, onComplete, onError }) {
+  const { isRawModeSupported } = useStdin();
   const [step, setStep] = useState(0);
   const [config, setConfig] = useState({});
   const [loading, setLoading] = useState(false);
@@ -963,22 +999,37 @@ function Wizard({ projectNameArg, onComplete, onError }) {
     setLoadingMessage("Finalisiere Konfiguration...");
     try {
       const { DEFAULTS: DEFAULTS2 } = await Promise.resolve().then(() => (init_config(), config_exports));
-      const infraProjectRef = infraUrl ? new URL(infraUrl).hostname.split(".")[0] : null;
-      const devProjectRef = devUrl ? new URL(devUrl).hostname.split(".")[0] : null;
+      const cleanedInfraUrl = cleanUrl(infraUrl);
+      const cleanedDevUrl = cleanUrl(devUrl);
+      const cleanedServiceRoleKey = serviceRoleKey.trim();
+      const infraProjectRef = cleanedInfraUrl ? new URL(cleanedInfraUrl).hostname.split(".")[0] : null;
+      const devProjectRef = cleanedDevUrl ? new URL(cleanedDevUrl).hostname.split(".")[0] : null;
       const schemaName = projectName.replace(/-/g, "_").toLowerCase();
+      if (infraProjectRef && cleanedServiceRoleKey) {
+        if (!isKeyForProject(cleanedServiceRoleKey, infraProjectRef)) {
+          const keyRef = extractProjectRefFromJwt(cleanedServiceRoleKey);
+          throw new Error(
+            `SERVICE_ROLE_KEY passt nicht zur INFRA-DB!
+Key geh\xF6rt zu: ${keyRef}
+INFRA-DB ist: ${infraProjectRef}
+
+Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
+          );
+        }
+      }
       const finalConfig = {
         username: username.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-"),
         projectName,
         schemaName,
         infraDb: {
-          url: infraUrl.trim(),
+          url: cleanedInfraUrl,
           projectRef: infraProjectRef
         },
         devDb: {
-          url: devUrl.trim(),
+          url: cleanedDevUrl,
           projectRef: devProjectRef
         },
-        serviceRoleKey: serviceRoleKey.trim(),
+        serviceRoleKey: cleanedServiceRoleKey,
         createGithub: createGithub || "none",
         autoInstallDeps: autoInstallDeps !== false,
         linkVercel: linkVercel === true,
@@ -996,6 +1047,9 @@ function Wizard({ projectNameArg, onComplete, onError }) {
       setLoading(false);
     }
   };
+  if (!isRawModeSupported) {
+    return /* @__PURE__ */ React4.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "red", bold: true }, "\u274C Fehler: Raw mode wird nicht unterst\xFCtzt"), /* @__PURE__ */ React4.createElement(Text, { color: "yellow" }, "   Diese CLI ben\xF6tigt ein interaktives Terminal."), /* @__PURE__ */ React4.createElement(Text, { color: "yellow" }, "   Bitte f\xFChre die CLI in einem Terminal aus (nicht in einem Pipe oder Script)."));
+  }
   if (loading) {
     return /* @__PURE__ */ React4.createElement(Box, null, /* @__PURE__ */ React4.createElement(Spinner2, { type: "dots" }), /* @__PURE__ */ React4.createElement(Text, null, " ", loadingMessage));
   }
@@ -1053,7 +1107,8 @@ function Wizard({ projectNameArg, onComplete, onError }) {
                 const profile = existing?.profile || {};
                 const tempServiceRoleKey = profile.SUPABASE_SERVICE_ROLE_KEY || profile.SUPABASE_VAULT_SERVICE_ROLE_KEY;
                 let fetchedKey = null;
-                const infraProjectRef = infraUrl ? new URL(infraUrl).hostname.split(".")[0] : null;
+                const cleanedInfraUrlForFetch = cleanUrl(infraUrl);
+                const infraProjectRef = cleanedInfraUrlForFetch ? new URL(cleanedInfraUrlForFetch).hostname.split(".")[0] : null;
                 if (tempServiceRoleKey && infraUrl) {
                   setServiceRoleKeyStatus("\u{1F50D} Versuche SERVICE_ROLE_KEY aus Vault zu holen...");
                   fetchedKey = await fetchServiceRoleKeyFromVault2(infraUrl, tempServiceRoleKey, () => {
@@ -1080,13 +1135,18 @@ function Wizard({ projectNameArg, onComplete, onError }) {
                     return;
                   }
                 }
-                if (!fetchedKey && tempServiceRoleKey) {
-                  setServiceRoleKeyStatus("\u2139\uFE0F  Verwende SERVICE_ROLE_KEY aus Profil");
-                  setServiceRoleKey(tempServiceRoleKey);
-                  setFetchingServiceRoleKey(false);
-                  setServiceRoleKeySubmitted(true);
-                  setStep(4);
-                  return;
+                if (!fetchedKey && tempServiceRoleKey && infraProjectRef) {
+                  if (isKeyForProject(tempServiceRoleKey, infraProjectRef)) {
+                    setServiceRoleKeyStatus("\u2139\uFE0F  Verwende SERVICE_ROLE_KEY aus Profil");
+                    setServiceRoleKey(tempServiceRoleKey);
+                    setFetchingServiceRoleKey(false);
+                    setServiceRoleKeySubmitted(true);
+                    setStep(4);
+                    return;
+                  } else {
+                    const keyRef = extractProjectRefFromJwt(tempServiceRoleKey);
+                    setServiceRoleKeyStatus(`\u26A0\uFE0F  Profil-Key geh\xF6rt zu ${keyRef}, nicht zu ${infraProjectRef}`);
+                  }
                 }
                 setServiceRoleKeyStatus("\u26A0\uFE0F  Kein SERVICE_ROLE_KEY gefunden - bitte manuell eingeben");
                 setFetchingServiceRoleKey(false);
@@ -1104,7 +1164,9 @@ function Wizard({ projectNameArg, onComplete, onError }) {
     ), fetchingServiceRoleKey && /* @__PURE__ */ React4.createElement(Box, { marginTop: 1 }, /* @__PURE__ */ React4.createElement(Spinner2, { type: "dots" }), /* @__PURE__ */ React4.createElement(Text, null, " ", serviceRoleKeyStatus)), serviceRoleKeyStatus && !fetchingServiceRoleKey && /* @__PURE__ */ React4.createElement(Text, { color: serviceRoleKeyStatus.startsWith("\u2713") ? "green" : "yellow", marginTop: 1 }, serviceRoleKeyStatus));
   }
   if (step === 3) {
-    return /* @__PURE__ */ React4.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "cyan", bold: true }, "SERVICE_ROLE_KEY (f\xFCr INFRA-DB/Vault-Zugriff):"), /* @__PURE__ */ React4.createElement(
+    const cleanedInfraUrlForValidation = cleanUrl(infraUrl);
+    const infraProjectRefForValidation = cleanedInfraUrlForValidation ? new URL(cleanedInfraUrlForValidation).hostname.split(".")[0] : null;
+    return /* @__PURE__ */ React4.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "cyan", bold: true }, "SERVICE_ROLE_KEY (f\xFCr INFRA-DB: ", infraProjectRefForValidation, "):"), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, "Der Key muss zur INFRA-DB passen, nicht zur DEV-DB!"), /* @__PURE__ */ React4.createElement(
       TextInput,
       {
         value: serviceRoleKey,
@@ -1112,12 +1174,16 @@ function Wizard({ projectNameArg, onComplete, onError }) {
         mask: "*",
         onSubmit: (value) => {
           if (value.trim()) {
+            if (infraProjectRefForValidation && !isKeyForProject(value.trim(), infraProjectRefForValidation)) {
+              const keyRef = extractProjectRefFromJwt(value.trim());
+              setServiceRoleKeyStatus(`\u26A0\uFE0F  WARNUNG: Key geh\xF6rt zu "${keyRef}", nicht zu "${infraProjectRefForValidation}"!`);
+            }
             setServiceRoleKeySubmitted(true);
             setStep(4);
           }
         }
       }
-    ));
+    ), serviceRoleKeyStatus && /* @__PURE__ */ React4.createElement(Text, { color: "yellow" }, serviceRoleKeyStatus));
   }
   if (step === 4) {
     return /* @__PURE__ */ React4.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "cyan", bold: true }, "Projektname:"), /* @__PURE__ */ React4.createElement(
@@ -1227,9 +1293,8 @@ var init_Wizard = __esm({
   }
 });
 function Success({ config, ctx, projectPath }) {
-  return /* @__PURE__ */ React4.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "green", bold: true }, `
-\u2728 Projekt "${config.projectName}" erfolgreich erstellt!
-`), /* @__PURE__ */ React4.createElement(Text, { color: "cyan", bold: true }, "\u{1F4CB} N\xE4chste Schritte:"), /* @__PURE__ */ React4.createElement(Text, null, `  cd ${config.projectName}`), /* @__PURE__ */ React4.createElement(Text, null, `  ${ctx.packageManager?.devCommand || "pnpm dev"}`), /* @__PURE__ */ React4.createElement(Text, null, `  http://localhost:3000
+  return /* @__PURE__ */ React4.createElement(Box, { flexDirection: "column", marginTop: 1 }, /* @__PURE__ */ React4.createElement(Text, { color: "green", bold: true }, `\u2728 Projekt "${config.projectName}" erfolgreich erstellt!`), /* @__PURE__ */ React4.createElement(Box, { marginTop: 1, flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "cyan", bold: true }, "\u{1F4CB} N\xE4chste Schritte:"), /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  1. cd ${config.projectName}`), ctx.migrationPending && /* @__PURE__ */ React4.createElement(React4.Fragment, null, /* @__PURE__ */ React4.createElement(Text, { color: "yellow" }, `  2. export SUPABASE_DB_PASSWORD=dein-password`), /* @__PURE__ */ React4.createElement(Text, { color: "yellow" }, `  3. pnpm db:migrate`), /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  4. pnpm dev`)), !ctx.migrationPending && /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  2. pnpm dev`), /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  \u2192 http://localhost:3000`)), /* @__PURE__ */ React4.createElement(Box, { marginTop: 1, flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "gray", bold: true }, "\u{1F4DD} Projekt-Details:"), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  Schema: ${config.schemaName}`), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  INFRA-DB: ${config.infraDb?.projectRef || "N/A"}`), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  DEV-DB: ${config.devDb?.projectRef || "N/A"}`), ctx.repoUrl && /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  GitHub: ${ctx.repoUrl}`)), ctx.logFilePath && /* @__PURE__ */ React4.createElement(Box, { marginTop: 1, flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "gray", bold: true }, "\u{1F4C4} Log-Datei:"), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  ${ctx.logFilePath}`)), /* @__PURE__ */ React4.createElement(Text, { color: "green", bold: true, marginTop: 1 }, `
+\u{1F680} Happy Coding!
 `));
 }
 var init_Success = __esm({
@@ -1270,7 +1335,7 @@ async function checkGitHubCLI(progressBar = null, silent = false) {
   }
   if (!isGitHubCLIInstalled()) {
     if (!silent) {
-      console.log(chalk10.yellow("\n\u26A0\uFE0F  GitHub CLI nicht gefunden"));
+      console.log(chalk11.yellow("\n\u26A0\uFE0F  GitHub CLI nicht gefunden"));
       const { install } = await inquirer.prompt([
         {
           type: "confirm",
@@ -1292,7 +1357,7 @@ async function checkGitHubCLI(progressBar = null, silent = false) {
   }
   if (!isGitHubCLIAuthenticated()) {
     if (!silent) {
-      console.log(chalk10.yellow("\n\u26A0\uFE0F  GitHub CLI nicht authentifiziert"));
+      console.log(chalk11.yellow("\n\u26A0\uFE0F  GitHub CLI nicht authentifiziert"));
       const { login } = await inquirer.prompt([
         {
           type: "confirm",
@@ -1302,7 +1367,7 @@ async function checkGitHubCLI(progressBar = null, silent = false) {
         }
       ]);
       if (login) {
-        console.log(chalk10.blue("\xD6ffne GitHub Login..."));
+        console.log(chalk11.blue("\xD6ffne GitHub Login..."));
         try {
           execSync("gh auth login", { stdio: "inherit" });
         } catch (error) {
@@ -1350,7 +1415,7 @@ function isVercelCLIAuthenticated() {
 async function checkVercelCLI(progressBar = null) {
   updateProgress(progressBar, null, "Pr\xFCfe Vercel CLI...");
   if (!isVercelCLIInstalled()) {
-    console.log(chalk10.yellow("\n\u26A0\uFE0F  Vercel CLI nicht gefunden"));
+    console.log(chalk11.yellow("\n\u26A0\uFE0F  Vercel CLI nicht gefunden"));
     const { install } = await inquirer.prompt([
       {
         type: "confirm",
@@ -1360,20 +1425,20 @@ async function checkVercelCLI(progressBar = null) {
       }
     ]);
     if (install) {
-      console.log(chalk10.blue("Installiere Vercel CLI..."));
+      console.log(chalk11.blue("Installiere Vercel CLI..."));
       try {
         execSync("npm install -g vercel", { stdio: "inherit" });
       } catch (error) {
         throw new Error(`Vercel CLI Installation fehlgeschlagen: ${error.message}`);
       }
     } else {
-      console.log(chalk10.dim("Vercel CLI wird \xFCbersprungen (optional)"));
+      console.log(chalk11.dim("Vercel CLI wird \xFCbersprungen (optional)"));
       return;
     }
   }
   updateProgress(progressBar, null, "Pr\xFCfe Vercel Authentifizierung...");
   if (!isVercelCLIAuthenticated()) {
-    console.log(chalk10.yellow("\n\u26A0\uFE0F  Vercel CLI nicht authentifiziert"));
+    console.log(chalk11.yellow("\n\u26A0\uFE0F  Vercel CLI nicht authentifiziert"));
     const { login } = await inquirer.prompt([
       {
         type: "confirm",
@@ -1383,11 +1448,11 @@ async function checkVercelCLI(progressBar = null) {
       }
     ]);
     if (login) {
-      console.log(chalk10.blue("\xD6ffne Vercel Login..."));
+      console.log(chalk11.blue("\xD6ffne Vercel Login..."));
       try {
         execSync("vercel login", { stdio: "inherit" });
       } catch (error) {
-        console.log(chalk10.yellow("\u26A0\uFE0F  Vercel Login fehlgeschlagen (optional)"));
+        console.log(chalk11.yellow("\u26A0\uFE0F  Vercel Login fehlgeschlagen (optional)"));
       }
     }
   }
@@ -1416,7 +1481,7 @@ async function checkPackageManager(progressBar = null, silent = false) {
   if (isPnpmInstalled()) {
     const version = execSync("pnpm --version", { encoding: "utf-8", stdio: "pipe" }).trim();
     if (!silent) {
-      console.log(chalk10.green(`\u2713 pnpm gefunden (Version ${version})`));
+      console.log(chalk11.green(`\u2713 pnpm gefunden (Version ${version})`));
       updateProgress(progressBar, null, "pnpm bereit");
     }
     return {
@@ -1429,8 +1494,8 @@ async function checkPackageManager(progressBar = null, silent = false) {
   if (isNpmInstalled()) {
     const version = execSync("npm --version", { encoding: "utf-8", stdio: "pipe" }).trim();
     if (!silent) {
-      console.log(chalk10.yellow(`\u26A0\uFE0F  pnpm nicht gefunden, verwende npm (Version ${version})`));
-      console.log(chalk10.dim("   Tipp: pnpm wird empfohlen. Installiere mit: npm install -g pnpm"));
+      console.log(chalk11.yellow(`\u26A0\uFE0F  pnpm nicht gefunden, verwende npm (Version ${version})`));
+      console.log(chalk11.dim("   Tipp: pnpm wird empfohlen. Installiere mit: npm install -g pnpm"));
       updateProgress(progressBar, null, "npm bereit");
     }
     return {
@@ -1458,7 +1523,7 @@ async function checkSupabaseCLI(progressBar = null, silent = false) {
   }
   if (!isSupabaseCLIInstalled()) {
     if (!silent) {
-      console.log(chalk10.yellow("\n\u26A0\uFE0F  Supabase CLI nicht gefunden"));
+      console.log(chalk11.yellow("\n\u26A0\uFE0F  Supabase CLI nicht gefunden"));
       const { install } = await inquirer.prompt([
         {
           type: "confirm",
@@ -1485,15 +1550,24 @@ var init_prechecks = __esm({
     init_progress();
   }
 });
-function createPrecheckTasks(config) {
+function createPrecheckTasks(config, options = {}) {
+  const { verbose } = options;
+  const debug = (ctx, msg) => {
+    if (verbose && ctx.debug) {
+      ctx.debug(msg);
+    }
+  };
   const taskDefinitions = [
     {
       title: "GitHub CLI",
       task: async (ctx, task) => {
         try {
+          debug(ctx, "Pr\xFCfe GitHub CLI...");
           ctx.githubToken = await checkGitHubCLI(null, true);
+          debug(ctx, `GitHub Token: ${ctx.githubToken ? "OK" : "fehlt"}`);
           task.title = "GitHub CLI \u2713";
         } catch (error) {
+          debug(ctx, `GitHub CLI Fehler: ${error.message}`);
           task.title = `GitHub CLI \u2717 (${error.message})`;
           throw error;
         }
@@ -1602,12 +1676,19 @@ var init_phase1_prechecks = __esm({
     init_prechecks();
   }
 });
-function createSetupTasks(config) {
+function createSetupTasks(config, options = {}) {
+  const { verbose } = options;
+  const debug = (ctx, msg) => {
+    if (verbose && ctx.debug) {
+      ctx.debug(msg);
+    }
+  };
   const taskDefinitions = [
     {
       title: "Schema-Name generieren",
       task: (ctx, task) => {
         ctx.schemaName = config.schemaName;
+        debug(ctx, `Schema-Name: ${ctx.schemaName}`);
         task.title = `Schema-Name: ${ctx.schemaName} \u2713`;
       }
     },
@@ -1615,11 +1696,15 @@ function createSetupTasks(config) {
       title: "Anon Key von INFRA-DB abrufen",
       task: async (ctx, task) => {
         const debugFn = (msg) => {
+          debug(ctx, msg);
         };
+        debug(ctx, `Hole Anon Key f\xFCr: ${config.infraDb.projectRef}`);
         ctx.anonKey = await fetchAnonKeyFromSupabase(config.infraDb.projectRef, debugFn);
         if (!ctx.anonKey) {
+          debug(ctx, "Anon Key nicht gefunden");
           task.title = "Anon Key von INFRA-DB abrufen \u26A0 (manuell erforderlich)";
         } else {
+          debug(ctx, `Anon Key: ${ctx.anonKey.substring(0, 20)}...`);
           task.title = "Anon Key von INFRA-DB abgerufen \u2713";
         }
       }
@@ -1628,12 +1713,16 @@ function createSetupTasks(config) {
       title: "Service Role Key von INFRA-DB abrufen",
       task: async (ctx, task) => {
         const debugFn = (msg) => {
+          debug(ctx, msg);
         };
+        debug(ctx, `Hole Service Role Key f\xFCr: ${config.infraDb.projectRef}`);
         ctx.serviceRoleKey = await fetchServiceRoleKeyFromSupabase(config.infraDb.projectRef, debugFn);
         if (!ctx.serviceRoleKey) {
+          debug(ctx, "Service Role Key nicht gefunden, verwende Config");
           ctx.serviceRoleKey = config.serviceRoleKey;
           task.title = "Service Role Key verwendet (aus Config) \u2713";
         } else {
+          debug(ctx, `Service Role Key: ${ctx.serviceRoleKey.substring(0, 20)}...`);
           task.title = "Service Role Key von INFRA-DB abgerufen \u2713";
         }
       }
@@ -1658,37 +1747,187 @@ var init_phase2_setup = __esm({
     init_supabase();
   }
 });
-function createProjectTasks(config, ctx, projectPath) {
+function initLog(projectPath, projectName) {
+  const logsDir = path5.join(projectPath, ".kessel");
+  if (!fs5.existsSync(logsDir)) {
+    fs5.mkdirSync(logsDir, { recursive: true });
+  }
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
+  logPath = path5.join(logsDir, `creation-${timestamp}.log`);
+  logFile = fs5.createWriteStream(logPath, { flags: "a" });
+  logFile.write(`# Kessel CLI - Projekt-Erstellung Log
+`);
+  logFile.write(`# Projekt: ${projectName}
+`);
+  logFile.write(`# Erstellt: ${(/* @__PURE__ */ new Date()).toISOString()}
+`);
+  logFile.write(`# ================================================
+
+`);
+}
+function writeLog(message, level = "INFO") {
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+  const line = `[${timestamp}] [${level}] ${message}
+`;
+  if (logFile) {
+    logFile.write(line);
+  }
+}
+function closeLog() {
+  if (logFile) {
+    writeLog(`Log abgeschlossen`, "INFO");
+    logFile.end();
+  }
+  return logPath;
+}
+function withTimeout(promise, ms, operation) {
+  return Promise.race([
+    promise,
+    new Promise(
+      (_, reject) => setTimeout(() => reject(new Error(`Timeout nach ${ms}ms bei: ${operation}`)), ms)
+    )
+  ]);
+}
+function createProjectTasks(config, ctx, projectPath, options = {}) {
+  const { verbose } = options;
+  let logInitialized = false;
+  const debug = (taskCtx, msg) => {
+    if (logInitialized) {
+      writeLog(msg, "DEBUG");
+    }
+    if (verbose) {
+      if (taskCtx && taskCtx.debug) {
+        taskCtx.debug(msg);
+      } else {
+        const timestamp = (/* @__PURE__ */ new Date()).toISOString().split("T")[1].split(".")[0];
+        console.log(`[${timestamp}] ${msg}`);
+      }
+    }
+  };
+  const initializeLog = () => {
+    try {
+      initLog(projectPath, config.projectName);
+      writeLog(`Starte Projekt-Erstellung: ${config.projectName}`);
+      writeLog(`INFRA-DB: ${config.infraDb.url}`);
+      writeLog(`DEV-DB: ${config.devDb.url}`);
+      writeLog(`Schema: ${config.schemaName}`);
+      writeLog(`GitHub: ${config.createGithub}`);
+      logInitialized = true;
+    } catch (e) {
+      if (verbose) {
+        console.log(`[WARN] Log konnte nicht initialisiert werden: ${e.message}`);
+      }
+    }
+  };
   const taskDefinitions = [
     {
-      title: "1/11: GitHub Repository erstellen",
+      title: "1/12: GitHub Repository erstellen",
       task: async (taskCtx, task) => {
+        writeLog(`Task 1/12: GitHub Repository`, "TASK");
+        debug(taskCtx, `\u{1F680} GitHub Task gestartet`);
+        debug(taskCtx, `createGithub: ${config.createGithub}`);
+        debug(taskCtx, `projectName: ${config.projectName}`);
         if (config.createGithub === "none") {
+          debug(taskCtx, `GitHub \xFCbersprungen (config.createGithub === 'none')`);
+          writeLog(`GitHub \xFCbersprungen`, "SKIP");
           task.skip("GitHub Repo-Erstellung \xFCbersprungen");
           return;
         }
         try {
-          const octokit = new Octokit({ auth: ctx.githubToken });
-          const { data: userData } = await octokit.rest.users.getAuthenticated();
-          const { data: repo } = await octokit.rest.repos.createForAuthenticatedUser({
-            name: config.projectName,
-            private: config.createGithub === "private",
-            auto_init: false
+          debug(taskCtx, `GitHub Token vorhanden: ${!!ctx.githubToken}`);
+          debug(taskCtx, `Token-L\xE4nge: ${ctx.githubToken ? ctx.githubToken.length : 0}`);
+          debug(taskCtx, `Erstelle Octokit Client...`);
+          const octokit = new Octokit({
+            auth: ctx.githubToken,
+            request: {
+              timeout: 3e4
+              // 30 Sekunden Timeout
+            }
           });
+          debug(taskCtx, `Hole User-Daten von GitHub API (Timeout: 30s)...`);
+          const { data: userData } = await withTimeout(
+            octokit.rest.users.getAuthenticated(),
+            3e4,
+            "GitHub User-Authentifizierung"
+          );
+          debug(taskCtx, `\u2713 User: ${userData.login}`);
+          writeLog(`GitHub User: ${userData.login}`);
+          debug(taskCtx, `Pr\xFCfe ob Repo existiert: ${userData.login}/${config.projectName}`);
+          try {
+            const { data: existingRepo } = await withTimeout(
+              octokit.rest.repos.get({
+                owner: userData.login,
+                repo: config.projectName
+              }),
+              15e3,
+              "GitHub Repo-Check"
+            );
+            ctx.repoUrl = existingRepo.html_url;
+            debug(taskCtx, `\u2713 Repo existiert bereits: ${existingRepo.html_url}`);
+            writeLog(`Repo existiert: ${existingRepo.html_url}`, "OK");
+            task.title = `1/12: GitHub Repository existiert bereits \u2713 (${existingRepo.html_url})`;
+            return;
+          } catch (e) {
+            if (e.status !== 404 && !e.message.includes("Timeout")) {
+              debug(taskCtx, `\u2717 Unerwarteter Fehler beim Pr\xFCfen: ${e.status} - ${e.message}`);
+              throw e;
+            }
+            if (e.message.includes("Timeout")) {
+              debug(taskCtx, `\u26A0 Timeout beim Pr\xFCfen, versuche trotzdem zu erstellen...`);
+            } else {
+              debug(taskCtx, `Repo existiert nicht (404), wird erstellt...`);
+            }
+          }
+          debug(taskCtx, `Erstelle neues Repo: ${config.projectName} (private: ${config.createGithub === "private"})`);
+          const { data: repo } = await withTimeout(
+            octokit.rest.repos.createForAuthenticatedUser({
+              name: config.projectName,
+              private: config.createGithub === "private",
+              auto_init: false
+            }),
+            3e4,
+            "GitHub Repo-Erstellung"
+          );
           ctx.repoUrl = repo.html_url;
-          task.title = `1/11: GitHub Repository erstellt \u2713 (${repo.html_url})`;
+          debug(taskCtx, `\u2713 Repo erstellt: ${repo.html_url}`);
+          writeLog(`Repo erstellt: ${repo.html_url}`, "OK");
+          task.title = `1/12: GitHub Repository erstellt \u2713 (${repo.html_url})`;
         } catch (error) {
-          task.title = `1/11: GitHub Repository \u2717 (${error.message})`;
+          debug(taskCtx, `\u2717 GitHub Fehler: ${error.message}`);
+          writeLog(`GitHub Fehler: ${error.message}`, "ERROR");
+          if (error.message.includes("Timeout")) {
+            task.title = `1/12: GitHub Repository \u26A0 (Timeout - manuell pr\xFCfen)`;
+            return;
+          }
+          if (error.message.includes("already exists") || error.status === 422) {
+            task.title = `1/12: GitHub Repository existiert bereits \u26A0`;
+            return;
+          }
+          task.title = `1/12: GitHub Repository \u2717 (${error.message})`;
           throw error;
         }
       }
     },
     {
-      title: "2/11: Template klonen",
+      title: "2/12: Template klonen",
       task: async (taskCtx, task) => {
+        debug(taskCtx, `Pr\xFCfe Zielverzeichnis: ${projectPath}`);
+        if (fs5.existsSync(projectPath)) {
+          const files = fs5.readdirSync(projectPath);
+          if (files.length > 0) {
+            debug(taskCtx, `Verzeichnis existiert bereits mit ${files.length} Dateien`);
+            if (fs5.existsSync(path5.join(projectPath, "package.json"))) {
+              debug(taskCtx, `Bestehendes Kessel-Projekt gefunden, \xFCberspringe Klonen`);
+              task.title = "2/12: Bestehendes Projekt verwendet \u2713";
+              initializeLog();
+              return;
+            }
+          }
+        }
         try {
-          const templateRepo2 = "phkoenig/kessel-boilerplate";
-          const gitUrl = `https://${ctx.githubToken}@github.com/${templateRepo2}.git`;
+          const templateRepo = "phkoenig/kessel-boilerplate";
+          const gitUrl = `https://${ctx.githubToken}@github.com/${templateRepo}.git`;
+          debug(taskCtx, `Git clone: ${templateRepo} \u2192 ${projectPath}`);
           execSync(
             `git clone --depth 1 --branch main ${gitUrl} ${projectPath}`,
             {
@@ -1703,24 +1942,32 @@ function createProjectTasks(config, ctx, projectPath) {
           if (fs5.existsSync(gitPath)) {
             fs5.rmSync(gitPath, { recursive: true, force: true });
           }
-          task.title = "2/11: Template geklont \u2713";
+          debug(taskCtx, `Template erfolgreich geklont`);
+          task.title = "2/12: Template geklont \u2713";
+          initializeLog();
         } catch (error) {
+          debug(taskCtx, `Git clone fehlgeschlagen: ${error.message}`);
           try {
+            const templateRepo = "phkoenig/kessel-boilerplate";
+            debug(taskCtx, `Versuche degit Fallback...`);
             const emitter = degit(`${templateRepo}#main`, {
               cache: false,
               force: true
             });
             await emitter.clone(projectPath);
-            task.title = "2/11: Template geklont (degit) \u2713";
+            debug(taskCtx, `Degit erfolgreich`);
+            task.title = "2/12: Template geklont (degit) \u2713";
+            initializeLog();
           } catch (degitError) {
-            task.title = `2/11: Template klonen \u2717`;
+            debug(taskCtx, `Degit auch fehlgeschlagen: ${degitError.message}`);
+            task.title = `2/12: Template klonen \u2717`;
             throw new Error(`Git: ${error.message}, Degit: ${degitError.message}`);
           }
         }
       }
     },
     {
-      title: "3/11: Bootstrap-Credentials (.env)",
+      title: "3/12: Bootstrap-Credentials (.env)",
       task: async (taskCtx, task) => {
         const envContent = `# Bootstrap-Credentials f\xFCr Vault-Zugriff (INFRA-DB)
 # WICHTIG: Dies ist die URL der INFRA-DB (Kessel) mit integriertem Vault
@@ -1728,11 +1975,11 @@ NEXT_PUBLIC_SUPABASE_URL=${config.infraDb.url}
 SERVICE_ROLE_KEY=${config.serviceRoleKey}
 `;
         fs5.writeFileSync(path5.join(projectPath, ".env"), envContent);
-        task.title = "3/11: .env erstellt \u2713";
+        task.title = "3/12: .env erstellt \u2713";
       }
     },
     {
-      title: "4/11: Public-Credentials (.env.local)",
+      title: "4/12: Public-Credentials (.env.local)",
       task: async (taskCtx, task) => {
         if (!ctx.anonKey) {
           ctx.anonKey = await fetchAnonKeyFromSupabase(config.infraDb.projectRef, () => {
@@ -1760,11 +2007,11 @@ NEXT_PUBLIC_DEV_SUPABASE_URL=${config.devDb.url}
 SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
 `;
         fs5.writeFileSync(path5.join(projectPath, ".env.local"), envLocalContent);
-        task.title = "4/11: .env.local erstellt \u2713";
+        task.title = "4/12: .env.local erstellt \u2713";
       }
     },
     {
-      title: "5/11: Git initialisieren",
+      title: "5/12: Git initialisieren",
       task: async (taskCtx, task) => {
         const gitDir = path5.join(projectPath, ".git");
         if (!fs5.existsSync(gitDir)) {
@@ -1781,11 +2028,11 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
             stdio: "ignore"
           });
         }
-        task.title = "5/11: Git initialisiert \u2713";
+        task.title = "5/12: Git initialisiert \u2713";
       }
     },
     {
-      title: "6/11: Dependencies installieren",
+      title: "6/12: Dependencies installieren",
       task: async (taskCtx, task) => {
         if (!config.autoInstallDeps) {
           task.skip("Dependencies-Installation \xFCbersprungen");
@@ -1793,54 +2040,83 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
         }
         const installCmd = ctx.packageManager?.installCommand || "pnpm install";
         execSync(installCmd, { cwd: projectPath, stdio: "inherit" });
-        task.title = "6/11: Dependencies installiert \u2713";
+        task.title = "6/12: Dependencies installiert \u2713";
       },
       skip: () => !config.autoInstallDeps
     },
     {
-      title: "7/11: Supabase Link",
+      title: "7/12: Supabase Link",
       task: async (taskCtx, task) => {
         try {
           execSync(`supabase link --project-ref ${config.infraDb.projectRef}`, {
             cwd: projectPath,
             stdio: "pipe"
           });
-          task.title = "7/11: INFRA-DB verlinkt \u2713";
+          task.title = "7/12: INFRA-DB verlinkt \u2713";
         } catch (error) {
-          task.title = "7/11: Supabase Link \u26A0 (nicht kritisch)";
+          task.title = "7/12: Supabase Link \u26A0 (nicht kritisch)";
         }
       }
     },
     {
-      title: "8/11: Datenbank-Migrationen",
+      title: "8/12: Multi-Tenant Schema erstellen",
       task: async (taskCtx, task) => {
+        debug(taskCtx, `Erstelle Schema: ${config.schemaName}`);
+        try {
+          const sql = `
+            -- Schema erstellen falls nicht vorhanden
+            CREATE SCHEMA IF NOT EXISTS "${config.schemaName}";
+            
+            -- Grant f\xFCr authenticated und anon
+            GRANT USAGE ON SCHEMA "${config.schemaName}" TO authenticated, anon;
+            GRANT ALL ON ALL TABLES IN SCHEMA "${config.schemaName}" TO authenticated;
+            GRANT SELECT ON ALL TABLES IN SCHEMA "${config.schemaName}" TO anon;
+            
+            -- Default privileges f\xFCr zuk\xFCnftige Tabellen
+            ALTER DEFAULT PRIVILEGES IN SCHEMA "${config.schemaName}" 
+              GRANT ALL ON TABLES TO authenticated;
+            ALTER DEFAULT PRIVILEGES IN SCHEMA "${config.schemaName}" 
+              GRANT SELECT ON TABLES TO anon;
+          `;
+          const response = await fetch(`${config.infraDb.url}/rest/v1/rpc/exec_sql`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": ctx.serviceRoleKey,
+              "Authorization": `Bearer ${ctx.serviceRoleKey}`
+            },
+            body: JSON.stringify({ sql_query: sql })
+          });
+          if (!response.ok) {
+            debug(taskCtx, `exec_sql nicht verf\xFCgbar, Schema wird beim ersten Start erstellt`);
+            task.title = `8/12: Schema "${config.schemaName}" \u26A0 (wird bei Migration erstellt)`;
+            return;
+          }
+          debug(taskCtx, `Schema "${config.schemaName}" erstellt`);
+          task.title = `8/12: Schema "${config.schemaName}" erstellt \u2713`;
+        } catch (error) {
+          debug(taskCtx, `Schema-Erstellung Fehler: ${error.message}`);
+          task.title = `8/12: Schema "${config.schemaName}" \u26A0 (manuell erstellen)`;
+        }
+      }
+    },
+    {
+      title: "9/12: Datenbank-Migrationen",
+      task: async (taskCtx, task) => {
+        debug(taskCtx, `Migration-Script suchen...`);
         const migrationScript = path5.join(projectPath, "scripts", "apply-migrations-to-schema.mjs");
         if (!fs5.existsSync(migrationScript)) {
+          debug(taskCtx, `Migration-Script nicht gefunden: ${migrationScript}`);
           task.skip("Migration-Script nicht gefunden");
           return;
         }
-        try {
-          const env = {
-            ...process.env,
-            NEXT_PUBLIC_SUPABASE_URL: config.infraDb.url,
-            SERVICE_ROLE_KEY: ctx.serviceRoleKey,
-            SUPABASE_SERVICE_ROLE_KEY: ctx.serviceRoleKey,
-            NEXT_PUBLIC_PROJECT_SCHEMA: config.schemaName,
-            SUPABASE_PROJECT_REF: config.infraDb.projectRef
-          };
-          execSync(`node scripts/apply-migrations-to-schema.mjs ${config.schemaName}`, {
-            cwd: projectPath,
-            stdio: "inherit",
-            env
-          });
-          task.title = "8/11: Migrationen angewendet \u2713";
-        } catch (error) {
-          task.title = "8/11: Migrationen \u26A0 (manuell erforderlich)";
-        }
+        debug(taskCtx, `Migrationen brauchen DB_PASSWORD - \xFCberspringe automatische Ausf\xFChrung`);
+        task.title = "9/12: Migrationen \u26A0 (manuell: pnpm db:migrate)";
+        ctx.migrationPending = true;
       }
     },
     {
-      title: "9/11: Standard-User pr\xFCfen",
+      title: "10/12: Standard-User pr\xFCfen",
       task: async (taskCtx, task) => {
         const createUsersScript = path5.join(projectPath, "scripts", "create-test-users.mjs");
         if (!fs5.existsSync(createUsersScript)) {
@@ -1858,14 +2134,14 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
             stdio: "inherit",
             env: userEnv
           });
-          task.title = "9/11: Standard-User erstellt \u2713";
+          task.title = "10/12: Standard-User erstellt \u2713";
         } catch (error) {
-          task.title = "9/11: Standard-User \u26A0";
+          task.title = "10/12: Standard-User \u26A0";
         }
       }
     },
     {
-      title: "10/11: Vercel Link",
+      title: "11/12: Vercel Link",
       task: async (taskCtx, task) => {
         if (!config.linkVercel) {
           task.skip("Vercel Link \xFCbersprungen");
@@ -1876,15 +2152,15 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
             cwd: projectPath,
             stdio: "pipe"
           });
-          task.title = "10/11: Vercel verlinkt \u2713";
+          task.title = "11/12: Vercel verlinkt \u2713";
         } catch (error) {
-          task.title = "10/11: Vercel Link \u26A0 (nicht kritisch)";
+          task.title = "11/12: Vercel Link \u26A0 (nicht kritisch)";
         }
       },
       skip: () => !config.linkVercel
     },
     {
-      title: "11/11: MCP-Konfiguration aktualisieren",
+      title: "12/12: MCP-Konfiguration aktualisieren",
       task: async (taskCtx, task) => {
         const mcpConfigPath = path5.join(projectPath, ".cursor", "mcp.json");
         const cursorDir = path5.join(projectPath, ".cursor");
@@ -1905,7 +2181,26 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
           url: `https://mcp.supabase.com/mcp?project_ref=${config.devDb.projectRef}`
         };
         fs5.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
-        task.title = "11/11: MCP-Konfiguration aktualisiert \u2713";
+        task.title = "11/12: MCP-Konfiguration aktualisiert \u2713";
+      }
+    },
+    {
+      title: "Log abschlie\xDFen",
+      task: async (taskCtx, task) => {
+        writeLog(`
+# ================================================`, "INFO");
+        writeLog(`# ZUSAMMENFASSUNG`, "INFO");
+        writeLog(`# ================================================`, "INFO");
+        writeLog(`Projekt: ${config.projectName}`, "INFO");
+        writeLog(`Pfad: ${projectPath}`, "INFO");
+        writeLog(`Schema: ${config.schemaName}`, "INFO");
+        writeLog(`INFRA-DB: ${config.infraDb.url}`, "INFO");
+        writeLog(`DEV-DB: ${config.devDb.url}`, "INFO");
+        writeLog(`GitHub: ${ctx.repoUrl || "nicht erstellt"}`, "INFO");
+        writeLog(`Migration pending: ${ctx.migrationPending ? "JA" : "NEIN"}`, "INFO");
+        const logFilePath = closeLog();
+        ctx.logFilePath = logFilePath;
+        task.title = `Log gespeichert \u2713`;
       }
     }
   ];
@@ -1920,12 +2215,17 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
         clearOutput: false,
         formatOutput: "default"
       }
-    })
+    }),
+    closeLog
+    // Exportiere für manuellen Aufruf falls nötig
   };
 }
+var logFile, logPath;
 var init_phase3_create = __esm({
   "src/tasks/phase3-create.js"() {
     init_supabase();
+    logFile = null;
+    logPath = null;
   }
 });
 function App({ projectNameArg, verbose, onComplete, onError }) {
@@ -1943,25 +2243,25 @@ function App({ projectNameArg, verbose, onComplete, onError }) {
   };
   useEffect(() => {
     if (phase === "prechecks" && config) {
-      const precheckTasks = createPrecheckTasks(config);
+      const precheckTasks = createPrecheckTasks(config, { verbose });
       setTasks(precheckTasks.tasks || []);
       setCurrentTaskIndex(0);
     }
-  }, [phase, config]);
+  }, [phase, config, verbose]);
   useEffect(() => {
     if (phase === "setup" && config) {
-      const setupTasks = createSetupTasks(config);
+      const setupTasks = createSetupTasks(config, { verbose });
       setTasks(setupTasks.tasks || []);
       setCurrentTaskIndex(0);
     }
-  }, [phase, config]);
+  }, [phase, config, verbose]);
   useEffect(() => {
     if (phase === "create" && config && projectPath) {
-      const createTasks = createProjectTasks(config, ctx, projectPath);
+      const createTasks = createProjectTasks(config, ctx, projectPath, { verbose });
       setTasks(createTasks.tasks || []);
       setCurrentTaskIndex(0);
     }
-  }, [phase, config, ctx, projectPath]);
+  }, [phase, config, ctx, projectPath, verbose]);
   const handleTasksComplete = () => {
     if (phase === "prechecks") {
       setPhase("setup");
@@ -1992,6 +2292,7 @@ function App({ projectNameArg, verbose, onComplete, onError }) {
       tasks,
       ctx,
       setCtx,
+      verbose,
       onComplete: handleTasksComplete,
       onError: handleError
     }
@@ -2001,6 +2302,7 @@ function App({ projectNameArg, verbose, onComplete, onError }) {
       tasks,
       ctx,
       setCtx,
+      verbose,
       onComplete: handleTasksComplete,
       onError: handleError
     }
@@ -2010,6 +2312,7 @@ function App({ projectNameArg, verbose, onComplete, onError }) {
       tasks,
       ctx,
       setCtx,
+      verbose,
       onComplete: handleTasksComplete,
       onError: handleError
     }
@@ -2038,24 +2341,41 @@ async function runInitCommand(projectNameArg, options) {
   const currentCwd = process.cwd();
   const projectName = projectNameArg || path5.basename(currentCwd);
   path5.resolve(currentCwd, projectName);
+  if (!process.stdin.isTTY) {
+    console.error(chalk11.red.bold("\n\u274C Fehler: Diese CLI ben\xF6tigt ein interaktives Terminal."));
+    console.error(chalk11.yellow("   Bitte f\xFChre die CLI in einem Terminal aus (nicht in einem Pipe oder Script).\n"));
+    process.exit(1);
+  }
   return new Promise((resolve, reject) => {
-    const { unmount } = render(
-      /* @__PURE__ */ React4.createElement(
-        App,
-        {
-          projectNameArg,
-          verbose,
-          onComplete: ({ config, ctx, projectPath: projectPath2 }) => {
-            unmount();
-            resolve({ config, ctx, projectPath: projectPath2 });
-          },
-          onError: (error) => {
-            unmount();
-            reject(error);
+    try {
+      const { unmount } = render(
+        /* @__PURE__ */ React4.createElement(
+          App,
+          {
+            projectNameArg,
+            verbose,
+            onComplete: ({ config, ctx, projectPath: projectPath2 }) => {
+              unmount();
+              resolve({ config, ctx, projectPath: projectPath2 });
+            },
+            onError: (error) => {
+              unmount();
+              reject(error);
+            }
           }
+        ),
+        {
+          stdin: process.stdin,
+          stdout: process.stdout,
+          stderr: process.stderr
         }
-      )
-    );
+      );
+    } catch (error) {
+      console.error(chalk11.red.bold("\n\u274C Fehler beim Starten der interaktiven UI:"));
+      console.error(chalk11.red(error.message));
+      console.error(chalk11.yellow("\nBitte stelle sicher, dass du die CLI in einem Terminal ausf\xFChrst.\n"));
+      reject(error);
+    }
   });
 }
 var init_init = __esm({
@@ -2064,11 +2384,11 @@ var init_init = __esm({
   }
 });
 function renderStatusTable(title, items) {
-  console.log(chalk10.white.bold(`
+  console.log(chalk11.white.bold(`
   ${title}`));
   for (const item of items) {
-    const icon = item.status === "ok" ? chalk10.green("\u2713") : item.status === "warning" ? chalk10.yellow("\u26A0") : item.status === "error" ? chalk10.red("\u2717") : chalk10.gray("\u25CB");
-    const statusText = item.detail ? chalk10.gray(item.detail) : "";
+    const icon = item.status === "ok" ? chalk11.green("\u2713") : item.status === "warning" ? chalk11.yellow("\u26A0") : item.status === "error" ? chalk11.red("\u2717") : chalk11.gray("\u25CB");
+    const statusText = item.detail ? chalk11.gray(item.detail) : "";
     const padding = Math.max(0, 20 - item.name.length);
     console.log(`    ${icon} ${item.name.padEnd(padding + item.name.length)} ${statusText}`);
   }
@@ -2111,7 +2431,7 @@ function getGitHubUser() {
 async function runStatusCommand() {
   const projectName = path5.basename(process.cwd());
   const config = loadConfig();
-  console.log(chalk10.cyan.bold(`
+  console.log(chalk11.cyan.bold(`
   \u256D\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E
   \u2502  KESSEL STATUS  (${projectName.padEnd(20)})     \u2502
   \u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F
@@ -2312,7 +2632,7 @@ function registerSecretsCommands(secretsCommand2) {
       const config = loadConfig();
       const serviceRoleKey = loadServiceRoleKey();
       if (!serviceRoleKey) {
-        console.error(chalk10.red("\u274C SERVICE_ROLE_KEY nicht gefunden. Bitte konfiguriere die .env Datei."));
+        console.error(chalk11.red("\u274C SERVICE_ROLE_KEY nicht gefunden. Bitte konfiguriere die .env Datei."));
         process.exit(1);
       }
       debugLog("SERVICE_ROLE_KEY geladen", { keyMasked: maskSecret(serviceRoleKey) }, verbose);
@@ -2340,7 +2660,7 @@ function registerSecretsCommands(secretsCommand2) {
       } catch (error) {
         debugError(error, verbose);
         if (error.message?.includes("schema cache")) {
-          console.warn(chalk10.yellow("\u26A0 Schema-Cache noch nicht aktualisiert. Verwende Fallback..."));
+          console.warn(chalk11.yellow("\u26A0 Schema-Cache noch nicht aktualisiert. Verwende Fallback..."));
           try {
             const httpResult = await callRpcViaHttp(
               config.defaultSupabaseUrl,
@@ -2382,7 +2702,7 @@ function registerSecretsCommands(secretsCommand2) {
                 throw readError;
               }
             } else {
-              console.warn(chalk10.yellow("\u26A0 Versuche direkten SQL-Fallback..."));
+              console.warn(chalk11.yellow("\u26A0 Versuche direkten SQL-Fallback..."));
               const sqlResult = await getSecretsViaDirectSql(
                 config.defaultSupabaseUrl,
                 serviceRoleKey,
@@ -2405,7 +2725,7 @@ function registerSecretsCommands(secretsCommand2) {
       if (secretName) {
         const value = secrets[secretName];
         if (!value) {
-          console.error(chalk10.red(`\u274C Secret "${secretName}" nicht gefunden`));
+          console.error(chalk11.red(`\u274C Secret "${secretName}" nicht gefunden`));
           process.exit(1);
         }
         outputSecret(secretName, value, options);
@@ -2417,20 +2737,20 @@ function registerSecretsCommands(secretsCommand2) {
       } else if (options.env) {
         entries.forEach(([key, value]) => console.log(`${key}=${value}`));
       } else {
-        console.log(chalk10.cyan.bold(`
+        console.log(chalk11.cyan.bold(`
 \u{1F4CB} Secrets (${entries.length}):
 `));
         entries.forEach(([key, value]) => {
           const preview = value.length > 50 ? value.substring(0, 50) + "..." : value;
-          console.log(chalk10.white(`  ${key.padEnd(40)} ${chalk10.dim(preview)}`));
+          console.log(chalk11.white(`  ${key.padEnd(40)} ${chalk11.dim(preview)}`));
         });
         console.log();
       }
     } catch (error) {
-      console.error(chalk10.red.bold("\n\u274C Fehler beim Abrufen der Secrets:"));
-      console.error(chalk10.red(error.message));
+      console.error(chalk11.red.bold("\n\u274C Fehler beim Abrufen der Secrets:"));
+      console.error(chalk11.red(error.message));
       debugError(error, verbose);
-      console.error(chalk10.dim("\n\u{1F4A1} Tipp: Verwende --verbose f\xFCr detaillierte Debug-Informationen"));
+      console.error(chalk11.dim("\n\u{1F4A1} Tipp: Verwende --verbose f\xFCr detaillierte Debug-Informationen"));
       process.exit(1);
     }
   });
@@ -2441,7 +2761,7 @@ function registerSecretsCommands(secretsCommand2) {
       const config = loadConfig();
       const serviceRoleKey = loadServiceRoleKey();
       if (!serviceRoleKey) {
-        console.error(chalk10.red("\u274C SERVICE_ROLE_KEY nicht gefunden."));
+        console.error(chalk11.red("\u274C SERVICE_ROLE_KEY nicht gefunden."));
         process.exit(1);
       }
       const supabase = createClient(config.defaultSupabaseUrl, serviceRoleKey, {
@@ -2456,15 +2776,15 @@ function registerSecretsCommands(secretsCommand2) {
             secret_name: secretName
           });
           if (!error2 && data2) {
-            console.error(chalk10.red(`\u274C Secret "${secretName}" existiert bereits`));
-            console.error(chalk10.yellow(`   Verwende --force um zu \xFCberschreiben
+            console.error(chalk11.red(`\u274C Secret "${secretName}" existiert bereits`));
+            console.error(chalk11.yellow(`   Verwende --force um zu \xFCberschreiben
 `));
             process.exit(1);
           }
         } catch (error2) {
         }
       }
-      console.log(chalk10.blue(`\u{1F4DD} F\xFCge Secret "${secretName}" hinzu...`));
+      console.log(chalk11.blue(`\u{1F4DD} F\xFCge Secret "${secretName}" hinzu...`));
       const { data, error } = await supabase.rpc("insert_secret", {
         name: secretName,
         secret: secretValue
@@ -2483,8 +2803,8 @@ function registerSecretsCommands(secretsCommand2) {
             if (httpResult.error) {
               throw httpResult.error;
             }
-            console.log(chalk10.green(`\u2713 Secret "${secretName}" erfolgreich hinzugef\xFCgt`));
-            console.log(chalk10.dim(`  UUID: ${httpResult.data}
+            console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich hinzugef\xFCgt`));
+            console.log(chalk11.dim(`  UUID: ${httpResult.data}
 `));
             return;
           } catch (httpError) {
@@ -2494,12 +2814,12 @@ function registerSecretsCommands(secretsCommand2) {
         }
         throw error;
       }
-      console.log(chalk10.green(`\u2713 Secret "${secretName}" erfolgreich hinzugef\xFCgt`));
-      console.log(chalk10.dim(`  UUID: ${data}
+      console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich hinzugef\xFCgt`));
+      console.log(chalk11.dim(`  UUID: ${data}
 `));
     } catch (error) {
-      console.error(chalk10.red.bold("\n\u274C Fehler beim Hinzuf\xFCgen des Secrets:"));
-      console.error(chalk10.red(error.message));
+      console.error(chalk11.red.bold("\n\u274C Fehler beim Hinzuf\xFCgen des Secrets:"));
+      console.error(chalk11.red(error.message));
       debugError(error, verbose);
       process.exit(1);
     }
@@ -2510,7 +2830,7 @@ function registerSecretsCommands(secretsCommand2) {
       const config = loadConfig();
       const serviceRoleKey = loadServiceRoleKey();
       if (!serviceRoleKey) {
-        console.error(chalk10.red("\u274C SERVICE_ROLE_KEY nicht gefunden."));
+        console.error(chalk11.red("\u274C SERVICE_ROLE_KEY nicht gefunden."));
         process.exit(1);
       }
       const supabase = createClient(config.defaultSupabaseUrl, serviceRoleKey, {
@@ -2519,7 +2839,7 @@ function registerSecretsCommands(secretsCommand2) {
           persistSession: false
         }
       });
-      console.log(chalk10.blue(`\u{1F50D} Pr\xFCfe ob Secret "${secretName}" existiert...`));
+      console.log(chalk11.blue(`\u{1F50D} Pr\xFCfe ob Secret "${secretName}" existiert...`));
       let existingValue = null;
       try {
         const { data: data2, error } = await supabase.rpc("read_secret", {
@@ -2527,8 +2847,8 @@ function registerSecretsCommands(secretsCommand2) {
         });
         if (error) {
           if (error.message?.includes("not found") || error.message?.includes("does not exist")) {
-            console.error(chalk10.red(`\u274C Secret "${secretName}" existiert nicht`));
-            console.error(chalk10.yellow(`   Verwende "secrets add" um ein neues Secret hinzuzuf\xFCgen
+            console.error(chalk11.red(`\u274C Secret "${secretName}" existiert nicht`));
+            console.error(chalk11.yellow(`   Verwende "secrets add" um ein neues Secret hinzuzuf\xFCgen
 `));
             process.exit(1);
           }
@@ -2548,16 +2868,16 @@ function registerSecretsCommands(secretsCommand2) {
         }
       } catch (error) {
         if (error.message?.includes("not found") || error.message?.includes("does not exist")) {
-          console.error(chalk10.red(`\u274C Secret "${secretName}" existiert nicht`));
+          console.error(chalk11.red(`\u274C Secret "${secretName}" existiert nicht`));
           process.exit(1);
         }
         throw error;
       }
       if (existingValue === secretValue) {
-        console.log(chalk10.yellow(`\u26A0 Secret "${secretName}" hat bereits diesen Wert`));
+        console.log(chalk11.yellow(`\u26A0 Secret "${secretName}" hat bereits diesen Wert`));
         process.exit(0);
       }
-      console.log(chalk10.blue(`\u{1F504} Aktualisiere Secret "${secretName}"...`));
+      console.log(chalk11.blue(`\u{1F504} Aktualisiere Secret "${secretName}"...`));
       const { error: deleteError } = await supabase.rpc("delete_secret", {
         secret_name: secretName
       });
@@ -2590,19 +2910,19 @@ function registerSecretsCommands(secretsCommand2) {
           if (httpResult.error) {
             throw httpResult.error;
           }
-          console.log(chalk10.green(`\u2713 Secret "${secretName}" erfolgreich aktualisiert`));
-          console.log(chalk10.dim(`  UUID: ${httpResult.data}
+          console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich aktualisiert`));
+          console.log(chalk11.dim(`  UUID: ${httpResult.data}
 `));
           return;
         }
         throw insertError;
       }
-      console.log(chalk10.green(`\u2713 Secret "${secretName}" erfolgreich aktualisiert`));
-      console.log(chalk10.dim(`  UUID: ${data}
+      console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich aktualisiert`));
+      console.log(chalk11.dim(`  UUID: ${data}
 `));
     } catch (error) {
-      console.error(chalk10.red.bold("\n\u274C Fehler beim Aktualisieren des Secrets:"));
-      console.error(chalk10.red(error.message));
+      console.error(chalk11.red.bold("\n\u274C Fehler beim Aktualisieren des Secrets:"));
+      console.error(chalk11.red(error.message));
       debugError(error, verbose);
       process.exit(1);
     }
@@ -2613,7 +2933,7 @@ function registerSecretsCommands(secretsCommand2) {
       const config = loadConfig();
       const serviceRoleKey = loadServiceRoleKey();
       if (!serviceRoleKey) {
-        console.error(chalk10.red("\u274C SERVICE_ROLE_KEY nicht gefunden."));
+        console.error(chalk11.red("\u274C SERVICE_ROLE_KEY nicht gefunden."));
         process.exit(1);
       }
       const supabase = createClient(config.defaultSupabaseUrl, serviceRoleKey, {
@@ -2632,11 +2952,11 @@ function registerSecretsCommands(secretsCommand2) {
           }
         ]);
         if (!confirm) {
-          console.log(chalk10.yellow("Abgebrochen."));
+          console.log(chalk11.yellow("Abgebrochen."));
           process.exit(0);
         }
       }
-      console.log(chalk10.blue(`\u{1F5D1}\uFE0F  L\xF6sche Secret "${secretName}"...`));
+      console.log(chalk11.blue(`\u{1F5D1}\uFE0F  L\xF6sche Secret "${secretName}"...`));
       const { error } = await supabase.rpc("delete_secret", {
         secret_name: secretName
       });
@@ -2650,21 +2970,21 @@ function registerSecretsCommands(secretsCommand2) {
             { secret_name: secretName },
             verbose
           );
-          console.log(chalk10.green(`\u2713 Secret "${secretName}" erfolgreich gel\xF6scht
+          console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich gel\xF6scht
 `));
           return;
         }
         if (error.message?.includes("not found") || error.message?.includes("does not exist")) {
-          console.error(chalk10.red(`\u274C Secret "${secretName}" existiert nicht`));
+          console.error(chalk11.red(`\u274C Secret "${secretName}" existiert nicht`));
           process.exit(1);
         }
         throw error;
       }
-      console.log(chalk10.green(`\u2713 Secret "${secretName}" erfolgreich gel\xF6scht
+      console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich gel\xF6scht
 `));
     } catch (error) {
-      console.error(chalk10.red.bold("\n\u274C Fehler beim L\xF6schen des Secrets:"));
-      console.error(chalk10.red(error.message));
+      console.error(chalk11.red.bold("\n\u274C Fehler beim L\xF6schen des Secrets:"));
+      console.error(chalk11.red(error.message));
       debugError(error, verbose);
       process.exit(1);
     }
@@ -2676,7 +2996,7 @@ function outputSecret(name, value, options) {
   } else if (options.env) {
     console.log(`${name}=${value}`);
   } else {
-    console.log(chalk10.green(`\u2713 ${name}: ${value}`));
+    console.log(chalk11.green(`\u2713 ${name}: ${value}`));
   }
 }
 var init_secrets = __esm({

@@ -1,14 +1,53 @@
 import React, { useState, useEffect } from 'react'
-import { Box, Text } from 'ink'
+import { Box, Text, useStdin } from 'ink'
 import TextInput from 'ink-text-input'
 import SelectInput from 'ink-select-input'
 // ConfirmInput wird durch einfache TextInput + Enter-Validation ersetzt
 import Spinner from 'ink-spinner'
 
 /**
+ * Bereinigt eine URL von Carriage-Return und anderen ungültigen Zeichen
+ */
+function cleanUrl(url) {
+  if (!url) return ''
+  // Entferne \r, \n, # und andere ungültige Zeichen am Anfang/Ende
+  return url.replace(/[\r\n#]+/g, '').trim()
+}
+
+/**
+ * Extrahiert die Project-Ref aus einem Supabase JWT
+ * @param {string} jwt - Der JWT Token
+ * @returns {string|null} Die Project-Ref oder null
+ */
+function extractProjectRefFromJwt(jwt) {
+  if (!jwt || typeof jwt !== 'string') return null
+  try {
+    const parts = jwt.split('.')
+    if (parts.length !== 3) return null
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'))
+    return payload.ref || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Prüft, ob ein SERVICE_ROLE_KEY zum Projekt passt
+ * @param {string} serviceRoleKey - Der Service Role Key
+ * @param {string} expectedProjectRef - Die erwartete Project-Ref
+ * @returns {boolean} True wenn der Key zum Projekt passt
+ */
+function isKeyForProject(serviceRoleKey, expectedProjectRef) {
+  if (!serviceRoleKey || !expectedProjectRef) return false
+  const keyProjectRef = extractProjectRefFromJwt(serviceRoleKey)
+  return keyProjectRef === expectedProjectRef
+}
+
+/**
  * Wizard-Komponente für die Eingabe aller benötigten Informationen
  */
 export function Wizard({ projectNameArg, onComplete, onError }) {
+  const { isRawModeSupported } = useStdin()
   const [step, setStep] = useState(0)
   const [config, setConfig] = useState({})
   const [loading, setLoading] = useState(false)
@@ -94,23 +133,39 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
 
     try {
       const { DEFAULTS } = await import('../config.js')
-      const infraProjectRef = infraUrl ? new URL(infraUrl).hostname.split(".")[0] : null
-      const devProjectRef = devUrl ? new URL(devUrl).hostname.split(".")[0] : null
+      const cleanedInfraUrl = cleanUrl(infraUrl)
+      const cleanedDevUrl = cleanUrl(devUrl)
+      const cleanedServiceRoleKey = serviceRoleKey.trim()
+      const infraProjectRef = cleanedInfraUrl ? new URL(cleanedInfraUrl).hostname.split(".")[0] : null
+      const devProjectRef = cleanedDevUrl ? new URL(cleanedDevUrl).hostname.split(".")[0] : null
       const schemaName = projectName.replace(/-/g, "_").toLowerCase()
+      
+      // Validiere SERVICE_ROLE_KEY gegen INFRA-DB
+      if (infraProjectRef && cleanedServiceRoleKey) {
+        if (!isKeyForProject(cleanedServiceRoleKey, infraProjectRef)) {
+          const keyRef = extractProjectRefFromJwt(cleanedServiceRoleKey)
+          throw new Error(
+            `SERVICE_ROLE_KEY passt nicht zur INFRA-DB!\n` +
+            `Key gehört zu: ${keyRef}\n` +
+            `INFRA-DB ist: ${infraProjectRef}\n\n` +
+            `Bitte den korrekten SERVICE_ROLE_KEY für "${infraProjectRef}" verwenden.`
+          )
+        }
+      }
 
       const finalConfig = {
         username: username.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-'),
         projectName,
         schemaName,
         infraDb: {
-          url: infraUrl.trim(),
+          url: cleanedInfraUrl,
           projectRef: infraProjectRef,
         },
         devDb: {
-          url: devUrl.trim(),
+          url: cleanedDevUrl,
           projectRef: devProjectRef,
         },
-        serviceRoleKey: serviceRoleKey.trim(),
+        serviceRoleKey: cleanedServiceRoleKey,
         createGithub: createGithub || 'none',
         autoInstallDeps: autoInstallDeps !== false,
         linkVercel: linkVercel === true,
@@ -131,6 +186,16 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   }
 
   // Render-Schritte
+  if (!isRawModeSupported) {
+    return (
+      <Box flexDirection="column">
+        <Text color="red" bold>❌ Fehler: Raw mode wird nicht unterstützt</Text>
+        <Text color="yellow">   Diese CLI benötigt ein interaktives Terminal.</Text>
+        <Text color="yellow">   Bitte führe die CLI in einem Terminal aus (nicht in einem Pipe oder Script).</Text>
+      </Box>
+    )
+  }
+
   if (loading) {
     return (
       <Box>
@@ -207,7 +272,8 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
                   const tempServiceRoleKey = profile.SUPABASE_SERVICE_ROLE_KEY || profile.SUPABASE_VAULT_SERVICE_ROLE_KEY
                   
                   let fetchedKey = null
-                  const infraProjectRef = infraUrl ? new URL(infraUrl).hostname.split(".")[0] : null
+                  const cleanedInfraUrlForFetch = cleanUrl(infraUrl)
+                  const infraProjectRef = cleanedInfraUrlForFetch ? new URL(cleanedInfraUrlForFetch).hostname.split(".")[0] : null
                   
                   // Versuche 1: Aus Vault holen
                   if (tempServiceRoleKey && infraUrl) {
@@ -239,14 +305,19 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
                     }
                   }
                   
-                  // Versuche 3: Aus Profil
-                  if (!fetchedKey && tempServiceRoleKey) {
-                    setServiceRoleKeyStatus('ℹ️  Verwende SERVICE_ROLE_KEY aus Profil')
-                    setServiceRoleKey(tempServiceRoleKey)
-                    setFetchingServiceRoleKey(false)
-                    setServiceRoleKeySubmitted(true)
-                    setStep(4) // Überspringe manuelle Eingabe
-                    return
+                  // Versuche 3: Aus Profil (NUR wenn Key zur INFRA-DB passt!)
+                  if (!fetchedKey && tempServiceRoleKey && infraProjectRef) {
+                    if (isKeyForProject(tempServiceRoleKey, infraProjectRef)) {
+                      setServiceRoleKeyStatus('ℹ️  Verwende SERVICE_ROLE_KEY aus Profil')
+                      setServiceRoleKey(tempServiceRoleKey)
+                      setFetchingServiceRoleKey(false)
+                      setServiceRoleKeySubmitted(true)
+                      setStep(4) // Überspringe manuelle Eingabe
+                      return
+                    } else {
+                      const keyRef = extractProjectRefFromJwt(tempServiceRoleKey)
+                      setServiceRoleKeyStatus(`⚠️  Profil-Key gehört zu ${keyRef}, nicht zu ${infraProjectRef}`)
+                    }
                   }
                   
                   // Kein Key gefunden - frage manuell
@@ -280,20 +351,34 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   }
 
   if (step === 3) {
+    // Extrahiere infraProjectRef für Validierung
+    const cleanedInfraUrlForValidation = cleanUrl(infraUrl)
+    const infraProjectRefForValidation = cleanedInfraUrlForValidation 
+      ? new URL(cleanedInfraUrlForValidation).hostname.split(".")[0] 
+      : null
+    
     return (
       <Box flexDirection="column">
-        <Text color="cyan" bold>SERVICE_ROLE_KEY (für INFRA-DB/Vault-Zugriff):</Text>
+        <Text color="cyan" bold>SERVICE_ROLE_KEY (für INFRA-DB: {infraProjectRefForValidation}):</Text>
+        <Text color="gray">Der Key muss zur INFRA-DB passen, nicht zur DEV-DB!</Text>
         <TextInput
           value={serviceRoleKey}
           onChange={setServiceRoleKey}
           mask="*"
           onSubmit={(value) => {
             if (value.trim()) {
+              // Validiere, ob der Key zum INFRA-Projekt passt
+              if (infraProjectRefForValidation && !isKeyForProject(value.trim(), infraProjectRefForValidation)) {
+                const keyRef = extractProjectRefFromJwt(value.trim())
+                setServiceRoleKeyStatus(`⚠️  WARNUNG: Key gehört zu "${keyRef}", nicht zu "${infraProjectRefForValidation}"!`)
+                // Trotzdem fortfahren, aber warnen
+              }
               setServiceRoleKeySubmitted(true)
               setStep(4)
             }
           }}
         />
+        {serviceRoleKeyStatus && <Text color="yellow">{serviceRoleKeyStatus}</Text>}
       </Box>
     )
   }

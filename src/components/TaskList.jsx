@@ -5,9 +5,16 @@ import Spinner from 'ink-spinner'
 /**
  * Task-Liste Komponente
  */
-export function TaskList({ tasks, ctx, setCtx, onComplete, onError }) {
+export function TaskList({ tasks, ctx, setCtx, verbose, onComplete, onError }) {
   const [taskStates, setTaskStates] = useState({})
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [debugLogs, setDebugLogs] = useState([])
+
+  // Debug-Funktion für Tasks
+  const debug = verbose ? (message) => {
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0]
+    setDebugLogs(prev => [...prev.slice(-10), `[${timestamp}] ${message}`])
+  } : () => {}
 
   useEffect(() => {
     if (tasks.length === 0) {
@@ -18,8 +25,11 @@ export function TaskList({ tasks, ctx, setCtx, onComplete, onError }) {
       for (let i = 0; i < tasks.length; i++) {
         const taskDef = tasks[i]
 
+        debug(`▶ Start: ${taskDef.title}`)
+
         // Prüfe ob Task übersprungen werden soll
         if (taskDef.skip && typeof taskDef.skip === 'function' && taskDef.skip()) {
+          debug(`⏭ Übersprungen: ${taskDef.title}`)
           setTaskStates(prev => ({
             ...prev,
             [i]: { status: 'skipped', message: 'übersprungen' }
@@ -40,13 +50,20 @@ export function TaskList({ tasks, ctx, setCtx, onComplete, onError }) {
             title: taskDef.title,
             output: '',
             skip: () => false,
+            debug: debug, // Debug-Funktion an Task übergeben
           }
 
           // Erstelle lokale Kopie des Contexts für diese Task
-          const taskCtx = { ...ctx }
+          const taskCtx = { ...ctx, debug }
+
+          debug(`⚙ Ausführung: ${taskDef.title}`)
+          const startTime = Date.now()
 
           // Führe Task aus
           await taskDef.task(taskCtx, mockTask)
+
+          const duration = Date.now() - startTime
+          debug(`✓ Fertig: ${taskDef.title} (${duration}ms)`)
 
           // Update Context mit Änderungen aus der Task
           setCtx(prevCtx => ({ ...prevCtx, ...taskCtx }))
@@ -57,6 +74,7 @@ export function TaskList({ tasks, ctx, setCtx, onComplete, onError }) {
             [i]: { status: 'completed' }
           }))
         } catch (error) {
+          debug(`✗ Fehler: ${taskDef.title} - ${error.message}`)
           // Setze Task auf "error"
           setTaskStates(prev => ({
             ...prev,
@@ -130,6 +148,16 @@ export function TaskList({ tasks, ctx, setCtx, onComplete, onError }) {
 
         return null
       })}
+      
+      {/* Debug-Logs anzeigen wenn verbose */}
+      {verbose && debugLogs.length > 0 && (
+        <Box flexDirection="column" marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
+          <Text color="gray" bold>🔍 Debug-Log:</Text>
+          {debugLogs.map((log, i) => (
+            <Text key={i} color="gray" dimColor>{log}</Text>
+          ))}
+        </Box>
+      )}
     </Box>
   )
 }

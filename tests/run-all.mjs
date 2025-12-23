@@ -19,9 +19,10 @@ console.log("╚═════════════════════�
 
 // Test-Dateien in der Reihenfolge, in der sie ausgeführt werden sollen
 const testFiles = [
-  "test-framework.mjs",        // Basis-Tests
-  "profile.test.mjs",          // Profil-System
-  "infra-dev-db.test.mjs",     // INFRA-DB + DEV-DB Architektur
+  "test-framework.mjs",           // Basis-Tests
+  "profile.test.mjs",             // Profil-System
+  "infra-dev-db.test.mjs",        // INFRA-DB + DEV-DB Architektur
+  "url-jwt-validation.test.mjs",  // URL-Bereinigung & JWT-Validierung
 ]
 
 let passed = 0

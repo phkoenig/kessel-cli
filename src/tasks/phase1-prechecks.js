@@ -10,17 +10,28 @@ import { createClient } from "@supabase/supabase-js"
 /**
  * Erstellt listr2 Tasks für Phase 1: Pre-Checks
  * @param {Object} config - KesselConfig-Objekt
+ * @param {Object} options - Optionen (z.B. verbose)
  * @returns {Object} Objekt mit tasks-Array und listr-Instanz
  */
-export function createPrecheckTasks(config) {
+export function createPrecheckTasks(config, options = {}) {
+  const { verbose } = options
+  const debug = (ctx, msg) => {
+    if (verbose && ctx.debug) {
+      ctx.debug(msg)
+    }
+  }
+
   const taskDefinitions = [
     {
       title: "GitHub CLI",
       task: async (ctx, task) => {
         try {
+          debug(ctx, "Prüfe GitHub CLI...")
           ctx.githubToken = await checkGitHubCLI(null, true) // silent = true
+          debug(ctx, `GitHub Token: ${ctx.githubToken ? 'OK' : 'fehlt'}`)
           task.title = "GitHub CLI ✓"
         } catch (error) {
+          debug(ctx, `GitHub CLI Fehler: ${error.message}`)
           task.title = `GitHub CLI ✗ (${error.message})`
           throw error
         }

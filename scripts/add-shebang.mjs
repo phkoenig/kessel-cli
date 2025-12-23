@@ -12,3 +12,4 @@ if (!content.startsWith('#!/usr/bin/env node')) {
   console.log('✓ Shebang bereits vorhanden')
 }
 
+
