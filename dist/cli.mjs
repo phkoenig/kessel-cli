@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import React4, { useState, useEffect } from 'react';
-import { render, Box, Text, useStdin } from 'ink';
+import { render, Box, Text, useStdin, useApp } from 'ink';
 import Spinner2 from 'ink-spinner';
 import fs5 from 'fs';
 import path5 from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import chalk11 from 'chalk';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import enquirer from 'enquirer';
 import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
@@ -966,6 +966,7 @@ function Wizard({ projectNameArg, onComplete, onError }) {
   const [linkVercel, setLinkVercel] = useState(null);
   const [doInitialCommit, setDoInitialCommit] = useState(null);
   const [doPush, setDoPush] = useState(null);
+  const [startDevServer, setStartDevServer] = useState(null);
   useEffect(() => {
     const loadProfile2 = async () => {
       try {
@@ -1034,7 +1035,8 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
         autoInstallDeps: autoInstallDeps !== false,
         linkVercel: linkVercel === true,
         doInitialCommit: doInitialCommit !== false,
-        doPush: doPush === true
+        doPush: doPush === true,
+        startDevServer: startDevServer === true
       };
       if (onComplete) {
         onComplete(finalConfig);
@@ -1281,6 +1283,23 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
         initialSelectedIndex: defaultIndex,
         onSelect: (item) => {
           setDoPush(item.value);
+          setStep(10);
+        }
+      }
+    ));
+  }
+  if (step === 10) {
+    const yesNoOptions = [
+      { label: "Ja, Dev-Server starten", value: true },
+      { label: "Nein, nur Projekt erstellen", value: false }
+    ];
+    return /* @__PURE__ */ React4.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "cyan", bold: true }, "Dev-Server nach Erstellung starten?"), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, "Startet `pnpm dev` im Projekt-Verzeichnis"), /* @__PURE__ */ React4.createElement(
+      SelectInput,
+      {
+        items: yesNoOptions,
+        initialSelectedIndex: 0,
+        onSelect: (item) => {
+          setStartDevServer(item.value);
           handleComplete();
         }
       }
@@ -1293,7 +1312,35 @@ var init_Wizard = __esm({
   }
 });
 function Success({ config, ctx, projectPath }) {
-  return /* @__PURE__ */ React4.createElement(Box, { flexDirection: "column", marginTop: 1 }, /* @__PURE__ */ React4.createElement(Text, { color: "green", bold: true }, `\u2728 Projekt "${config.projectName}" erfolgreich erstellt!`), /* @__PURE__ */ React4.createElement(Box, { marginTop: 1, flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "cyan", bold: true }, "\u{1F4CB} N\xE4chste Schritte:"), /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  1. cd ${config.projectName}`), ctx.migrationPending && /* @__PURE__ */ React4.createElement(React4.Fragment, null, /* @__PURE__ */ React4.createElement(Text, { color: "yellow" }, `  2. export SUPABASE_DB_PASSWORD=dein-password`), /* @__PURE__ */ React4.createElement(Text, { color: "yellow" }, `  3. pnpm db:migrate`), /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  4. pnpm dev`)), !ctx.migrationPending && /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  2. pnpm dev`), /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  \u2192 http://localhost:3000`)), /* @__PURE__ */ React4.createElement(Box, { marginTop: 1, flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "gray", bold: true }, "\u{1F4DD} Projekt-Details:"), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  Schema: ${config.schemaName}`), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  INFRA-DB: ${config.infraDb?.projectRef || "N/A"}`), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  DEV-DB: ${config.devDb?.projectRef || "N/A"}`), ctx.repoUrl && /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  GitHub: ${ctx.repoUrl}`)), ctx.logFilePath && /* @__PURE__ */ React4.createElement(Box, { marginTop: 1, flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "gray", bold: true }, "\u{1F4C4} Log-Datei:"), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  ${ctx.logFilePath}`)), /* @__PURE__ */ React4.createElement(Text, { color: "green", bold: true, marginTop: 1 }, `
+  const { exit } = useApp();
+  const [devServerStarting, setDevServerStarting] = useState(false);
+  useEffect(() => {
+    if (config.startDevServer && !devServerStarting) {
+      setDevServerStarting(true);
+      const timer = setTimeout(() => {
+        exit();
+        console.log(`
+\u{1F680} Starte Dev-Server in ${projectPath}...
+`);
+        const devCmd = ctx.packageManager?.name === "npm" ? "npm" : "pnpm";
+        const devProcess = spawn(devCmd, ["run", "dev"], {
+          cwd: projectPath,
+          stdio: "inherit",
+          shell: true
+        });
+        devProcess.on("error", (err) => {
+          console.error(`
+\u274C Fehler beim Starten des Dev-Servers: ${err.message}`);
+          process.exit(1);
+        });
+        devProcess.on("close", (code) => {
+          process.exit(code || 0);
+        });
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [config.startDevServer, devServerStarting, exit, projectPath, ctx.packageManager]);
+  return /* @__PURE__ */ React4.createElement(Box, { flexDirection: "column", marginTop: 1 }, /* @__PURE__ */ React4.createElement(Text, { color: "green", bold: true }, `\u2728 Projekt "${config.projectName}" erfolgreich erstellt!`), config.startDevServer ? /* @__PURE__ */ React4.createElement(Box, { marginTop: 1, flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "cyan", bold: true }, "\u{1F680} Dev-Server wird gestartet..."), /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  \u2192 http://localhost:3000`)) : /* @__PURE__ */ React4.createElement(Box, { marginTop: 1, flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "cyan", bold: true }, "\u{1F4CB} N\xE4chste Schritte:"), /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  1. cd ${config.projectName}`), ctx.migrationPending && /* @__PURE__ */ React4.createElement(React4.Fragment, null, /* @__PURE__ */ React4.createElement(Text, { color: "yellow" }, `  2. export SUPABASE_DB_PASSWORD=dein-password`), /* @__PURE__ */ React4.createElement(Text, { color: "yellow" }, `  3. pnpm db:migrate`), /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  4. pnpm dev`)), !ctx.migrationPending && /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  2. pnpm dev`), /* @__PURE__ */ React4.createElement(Text, { color: "white" }, `  \u2192 http://localhost:3000`)), /* @__PURE__ */ React4.createElement(Box, { marginTop: 1, flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "gray", bold: true }, "\u{1F4DD} Projekt-Details:"), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  Schema: ${config.schemaName}`), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  INFRA-DB: ${config.infraDb?.projectRef || "N/A"}`), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  DEV-DB: ${config.devDb?.projectRef || "N/A"}`), ctx.repoUrl && /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  GitHub: ${ctx.repoUrl}`)), ctx.logFilePath && /* @__PURE__ */ React4.createElement(Box, { marginTop: 1, flexDirection: "column" }, /* @__PURE__ */ React4.createElement(Text, { color: "gray", bold: true }, "\u{1F4C4} Log-Datei:"), /* @__PURE__ */ React4.createElement(Text, { color: "gray" }, `  ${ctx.logFilePath}`)), !config.startDevServer && /* @__PURE__ */ React4.createElement(Text, { color: "green", bold: true, marginTop: 1 }, `
 \u{1F680} Happy Coding!
 `));
 }

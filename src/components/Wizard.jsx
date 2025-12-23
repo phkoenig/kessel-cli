@@ -90,6 +90,9 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   // Schritt 10: Push
   const [doPush, setDoPush] = useState(null)
 
+  // Schritt 11: Dev-Server starten
+  const [startDevServer, setStartDevServer] = useState(null)
+
   useEffect(() => {
     // Lade existierendes Profil beim Start
     const loadProfile = async () => {
@@ -171,6 +174,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
         linkVercel: linkVercel === true,
         doInitialCommit: doInitialCommit !== false,
         doPush: doPush === true,
+        startDevServer: startDevServer === true,
       }
 
       if (onComplete) {
@@ -496,6 +500,27 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
           initialSelectedIndex={defaultIndex}
           onSelect={(item) => {
             setDoPush(item.value)
+            setStep(10)
+          }}
+        />
+      </Box>
+    )
+  }
+
+  if (step === 10) {
+    const yesNoOptions = [
+      { label: 'Ja, Dev-Server starten', value: true },
+      { label: 'Nein, nur Projekt erstellen', value: false },
+    ]
+    return (
+      <Box flexDirection="column">
+        <Text color="cyan" bold>Dev-Server nach Erstellung starten?</Text>
+        <Text color="gray">Startet `pnpm dev` im Projekt-Verzeichnis</Text>
+        <SelectInput
+          items={yesNoOptions}
+          initialSelectedIndex={0}
+          onSelect={(item) => {
+            setStartDevServer(item.value)
             handleComplete()
           }}
         />
