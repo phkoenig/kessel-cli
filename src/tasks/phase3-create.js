@@ -316,6 +316,12 @@ NEXT_PUBLIC_DEV_SUPABASE_URL=${config.devDb.url}
 
 # Service Role Key für Server-Side Operationen (User-Erstellung, etc.)
 SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
+
+# ════════════════════════════════════════════════════════════════════
+# Local Development Defaults
+# ════════════════════════════════════════════════════════════════════
+# Auth-Bypass aktiviert den DevUserSelector auf der Login-Seite
+NEXT_PUBLIC_AUTH_BYPASS=true
 `
         fs.writeFileSync(path.join(projectPath, ".env.local"), envLocalContent)
         task.title = "4/12: .env.local erstellt ✓"
