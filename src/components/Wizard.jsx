@@ -4,6 +4,9 @@ import TextInput from 'ink-text-input'
 import SelectInput from 'ink-select-input'
 // ConfirmInput wird durch einfache TextInput + Enter-Validation ersetzt
 import Spinner from 'ink-spinner'
+import { WizardProgress } from './WizardProgress.jsx'
+import path from 'path'
+import fs from 'fs'
 
 /**
  * Bereinigt eine URL von Carriage-Return und anderen ungültigen Zeichen
@@ -44,6 +47,27 @@ function isKeyForProject(serviceRoleKey, expectedProjectRef) {
 }
 
 /**
+ * Schritt-Titel für Wizard-Progress
+ */
+const STEP_TITLES = [
+  'Username eingeben',
+  'INFRA-DB URL eingeben',
+  'DEV-DB URL eingeben',
+  'SERVICE_ROLE_KEY eingeben',
+  'Projektname eingeben',
+  'Installationsordner eingeben',
+  'DB-Passwort eingeben (optional)',
+  'GitHub Repository konfigurieren',
+  'Dependencies-Installation konfigurieren',
+  'Vercel-Verknüpfung konfigurieren',
+  'Initial Commit konfigurieren',
+  'Push konfigurieren',
+  'Dev-Server konfigurieren',
+]
+
+const TOTAL_STEPS = 13
+
+/**
  * Wizard-Komponente für die Eingabe aller benötigten Informationen
  */
 export function Wizard({ projectNameArg, onComplete, onError }) {
@@ -75,22 +99,33 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   const [projectName, setProjectName] = useState(projectNameArg || '')
   const [projectNameSubmitted, setProjectNameSubmitted] = useState(false)
 
-  // Schritt 6: GitHub Repo
+  // Schritt 6: Installationsordner
+  const [installPath, setInstallPath] = useState('')
+  const [installPathSubmitted, setInstallPathSubmitted] = useState(false)
+
+  // Schritt 7: GitHub Repo
   const [createGithub, setCreateGithub] = useState(null)
 
-  // Schritt 7: Auto Install
+  // Schritt 8: Auto Install
   const [autoInstallDeps, setAutoInstallDeps] = useState(null)
 
-  // Schritt 8: Vercel Link
+  // Schritt 9: Vercel Link
   const [linkVercel, setLinkVercel] = useState(null)
 
-  // Schritt 9: Initial Commit
+  // Schritt 10: Initial Commit
   const [doInitialCommit, setDoInitialCommit] = useState(null)
 
-  // Schritt 10: Push
+  // Schritt 11: Push
   const [doPush, setDoPush] = useState(null)
 
-  // Schritt 11: Dev-Server starten
+  // Schritt 6: DB-Passwort (optional, für automatische Schema-Konfiguration)
+  const [dbPassword, setDbPassword] = useState('')
+  const [dbPasswordSubmitted, setDbPasswordSubmitted] = useState(false)
+  const [skipDbPassword, setSkipDbPassword] = useState(false)
+  const [fetchingDbPassword, setFetchingDbPassword] = useState(false)
+  const [dbPasswordFromVault, setDbPasswordFromVault] = useState(false)
+
+  // Schritt 13: Dev-Server starten
   const [startDevServer, setStartDevServer] = useState(null)
 
   useEffect(() => {
@@ -130,7 +165,39 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     loadProfile()
   }, [])
 
-  const handleComplete = async () => {
+  // Versuche DB-Passwort aus Vault zu laden wenn Step 6 erreicht wird
+  useEffect(() => {
+    if (step === 6 && !dbPasswordSubmitted && !fetchingDbPassword && infraUrl && serviceRoleKey) {
+      const fetchFromVault = async () => {
+        setFetchingDbPassword(true)
+        try {
+          const { fetchDbPasswordFromVault } = await import('../utils/supabase.js')
+          const cleanedInfraUrl = cleanUrl(infraUrl)
+          const cleanedServiceRoleKey = serviceRoleKey.trim()
+          
+          const vaultPassword = await fetchDbPasswordFromVault(
+            cleanedInfraUrl,
+            cleanedServiceRoleKey,
+            null // debugFn
+          )
+          
+          if (vaultPassword) {
+            setDbPassword(vaultPassword)
+            setDbPasswordFromVault(true)
+          }
+        } catch (error) {
+          // Vault-Zugriff fehlgeschlagen - ignorieren, User kann manuell eingeben
+        } finally {
+          setFetchingDbPassword(false)
+        }
+      }
+      
+      fetchFromVault()
+    }
+  }, [step, dbPasswordSubmitted, fetchingDbPassword, infraUrl, serviceRoleKey])
+
+  // handleComplete akzeptiert optionale overrides für async-sichere Werte
+  const handleComplete = async (overrides = {}) => {
     setLoading(true)
     setLoadingMessage('Finalisiere Konfiguration...')
 
@@ -142,6 +209,21 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
       const infraProjectRef = cleanedInfraUrl ? new URL(cleanedInfraUrl).hostname.split(".")[0] : null
       const devProjectRef = cleanedDevUrl ? new URL(cleanedDevUrl).hostname.split(".")[0] : null
       const schemaName = projectName.replace(/-/g, "_").toLowerCase()
+      
+      // Berechne projectPath basierend auf Installationsordner
+      let projectPath
+      if (installPath && installPath.trim()) {
+        // Wenn absoluter Pfad angegeben wurde
+        if (path.isAbsolute(installPath.trim())) {
+          projectPath = path.resolve(installPath.trim(), projectName)
+        } else {
+          // Relativer Pfad - relativ zum aktuellen Verzeichnis
+          projectPath = path.resolve(process.cwd(), installPath.trim(), projectName)
+        }
+      } else {
+        // Fallback: Aktuelles Verzeichnis + Projektname
+        projectPath = path.resolve(process.cwd(), projectName)
+      }
       
       // Validiere SERVICE_ROLE_KEY gegen INFRA-DB
       if (infraProjectRef && cleanedServiceRoleKey) {
@@ -156,10 +238,16 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
         }
       }
 
+      // Verwende overrides wenn vorhanden (wegen async setState)
+      const finalStartDevServer = overrides.startDevServer !== undefined 
+        ? overrides.startDevServer 
+        : startDevServer
+
       const finalConfig = {
         username: username.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-'),
         projectName,
         schemaName,
+        projectPath, // Installationspfad hinzufügen
         infraDb: {
           url: cleanedInfraUrl,
           projectRef: infraProjectRef,
@@ -169,12 +257,13 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
           projectRef: devProjectRef,
         },
         serviceRoleKey: cleanedServiceRoleKey,
+        dbPassword: dbPassword || null, // Optional: für automatische Schema-Konfiguration
         createGithub: createGithub || 'none',
         autoInstallDeps: autoInstallDeps !== false,
         linkVercel: linkVercel === true,
         doInitialCommit: doInitialCommit !== false,
         doPush: doPush === true,
-        startDevServer: startDevServer === true,
+        startDevServer: finalStartDevServer === true,
       }
 
       if (onComplete) {
@@ -212,6 +301,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   if (step === 0) {
     return (
       <Box flexDirection="column">
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
         <Text color="cyan" bold>Dein Username:</Text>
         <TextInput
           value={username}
@@ -230,6 +320,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   if (step === 1) {
     return (
       <Box flexDirection="column">
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
         <Text color="cyan" bold>INFRA-DB URL (Kessel - Auth, Vault, Multi-Tenant):</Text>
         <TextInput
           value={infraUrl}
@@ -253,6 +344,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   if (step === 2) {
     return (
       <Box flexDirection="column">
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
         <Text color="cyan" bold>DEV-DB URL (App-Daten, Entwicklung):</Text>
         <TextInput
           value={devUrl}
@@ -363,6 +455,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     
     return (
       <Box flexDirection="column">
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
         <Text color="cyan" bold>SERVICE_ROLE_KEY (für INFRA-DB: {infraProjectRefForValidation}):</Text>
         <Text color="gray">Der Key muss zur INFRA-DB passen, nicht zur DEV-DB!</Text>
         <TextInput
@@ -390,6 +483,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   if (step === 4) {
     return (
       <Box flexDirection="column">
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
         <Text color="cyan" bold>Projektname:</Text>
         <TextInput
           value={projectName}
@@ -397,7 +491,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
           onSubmit={(value) => {
             if (value.trim() && /^[a-z0-9-]+$/.test(value)) {
               setProjectNameSubmitted(true)
-              setStep(6)
+              setStep(5)
             }
           }}
         />
@@ -406,6 +500,99 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   }
 
   if (step === 5) {
+    // Berechne Standard-Installationsordner (aktuelles Verzeichnis)
+    const defaultPath = process.cwd()
+    
+    // Berechne vollständigen Pfad für Anzeige
+    const calculateFullPath = (inputPath) => {
+      if (!inputPath || !inputPath.trim()) {
+        return path.resolve(defaultPath, projectName)
+      }
+      if (path.isAbsolute(inputPath.trim())) {
+        return path.resolve(inputPath.trim(), projectName)
+      }
+      return path.resolve(defaultPath, inputPath.trim(), projectName)
+    }
+    
+    const fullPath = calculateFullPath(installPath)
+    
+    return (
+      <Box flexDirection="column">
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <Text color="cyan" bold>Installationsordner:</Text>
+        <Text color="gray">Aktuelles Verzeichnis: {defaultPath}</Text>
+        <Text color="gray">Leer lassen für: {defaultPath}</Text>
+        <TextInput
+          value={installPath}
+          onChange={setInstallPath}
+          onSubmit={(value) => {
+          setInstallPathSubmitted(true)
+          setStep(6) // DB-Passwort Step
+          }}
+        />
+        <Text color="gray" marginTop={1}>
+          Vollständiger Pfad: {fullPath}
+        </Text>
+      </Box>
+    )
+  }
+
+  if (step === 6) {
+    // Optionaler DB-Passwort Step für automatische Schema-Konfiguration
+    
+    // Zeige Spinner während Vault-Lookup
+    if (fetchingDbPassword) {
+      return (
+        <Box flexDirection="column">
+          <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+          <Text color="cyan" bold>DB-Passwort (optional):</Text>
+          <Box>
+            <Text color="yellow"><Spinner type="dots" /></Text>
+            <Text color="gray"> Suche Passwort im Vault...</Text>
+          </Box>
+        </Box>
+      )
+    }
+    
+    return (
+      <Box flexDirection="column">
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <Text color="cyan" bold>DB-Passwort (optional):</Text>
+        {dbPasswordFromVault ? (
+          <Text color="green">✓ Aus Vault geladen (SUPABASE_DB_PASSWORD)</Text>
+        ) : (
+          <>
+            <Text color="gray">Für automatische Schema-Konfiguration (PostgREST)</Text>
+            <Text color="gray">Leer lassen = später manuell via Migration</Text>
+          </>
+        )}
+        <TextInput
+          value={dbPassword}
+          onChange={(value) => {
+            setDbPassword(value)
+            // Wenn User ändert, ist es nicht mehr aus Vault
+            if (dbPasswordFromVault && value !== dbPassword) {
+              setDbPasswordFromVault(false)
+            }
+          }}
+          onSubmit={(value) => {
+            if (value.trim()) {
+              setDbPassword(value.trim())
+            }
+            setDbPasswordSubmitted(true)
+            setStep(7) // Weiter zu GitHub
+          }}
+        />
+        <Text color="gray" marginTop={1}>
+          {dbPassword 
+            ? (dbPasswordFromVault ? '↵ Enter zum Bestätigen' : '✓ Passwort eingegeben')
+            : 'Leer lassen = Migration-Datei wird erstellt'}
+        </Text>
+      </Box>
+    )
+  }
+
+  if (step === 7) {
     const githubOptions = [
       { label: 'Ja, privat', value: 'private' },
       { label: 'Ja, öffentlich', value: 'public' },
@@ -414,51 +601,12 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
 
     return (
       <Box flexDirection="column">
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
         <Text color="cyan" bold>GitHub Repository erstellen?</Text>
         <SelectInput
           items={githubOptions}
           onSelect={(item) => {
             setCreateGithub(item.value)
-            setStep(6)
-          }}
-        />
-      </Box>
-    )
-  }
-
-  if (step === 6) {
-    const yesNoOptions = [
-      { label: 'Ja', value: true },
-      { label: 'Nein', value: false },
-    ]
-    return (
-      <Box flexDirection="column">
-        <Text color="cyan" bold>Dependencies automatisch installieren?</Text>
-        <SelectInput
-          items={yesNoOptions}
-          initialSelectedIndex={0}
-          onSelect={(item) => {
-            setAutoInstallDeps(item.value)
-            setStep(7)
-          }}
-        />
-      </Box>
-    )
-  }
-
-  if (step === 7) {
-    const yesNoOptions = [
-      { label: 'Ja', value: true },
-      { label: 'Nein', value: false },
-    ]
-    return (
-      <Box flexDirection="column">
-        <Text color="cyan" bold>Mit Vercel verknüpfen?</Text>
-        <SelectInput
-          items={yesNoOptions}
-          initialSelectedIndex={1}
-          onSelect={(item) => {
-            setLinkVercel(item.value)
             setStep(8)
           }}
         />
@@ -473,12 +621,13 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     ]
     return (
       <Box flexDirection="column">
-        <Text color="cyan" bold>Initial Commit erstellen?</Text>
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <Text color="cyan" bold>Dependencies automatisch installieren?</Text>
         <SelectInput
           items={yesNoOptions}
           initialSelectedIndex={0}
           onSelect={(item) => {
-            setDoInitialCommit(item.value)
+            setAutoInstallDeps(item.value)
             setStep(9)
           }}
         />
@@ -491,15 +640,15 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
       { label: 'Ja', value: true },
       { label: 'Nein', value: false },
     ]
-    const defaultIndex = (createGithub !== 'none' && doInitialCommit) ? 0 : 1
     return (
       <Box flexDirection="column">
-        <Text color="cyan" bold>Änderungen zu GitHub pushen?</Text>
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <Text color="cyan" bold>Mit Vercel verknüpfen?</Text>
         <SelectInput
           items={yesNoOptions}
-          initialSelectedIndex={defaultIndex}
+          initialSelectedIndex={1}
           onSelect={(item) => {
-            setDoPush(item.value)
+            setLinkVercel(item.value)
             setStep(10)
           }}
         />
@@ -509,11 +658,55 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
 
   if (step === 10) {
     const yesNoOptions = [
+      { label: 'Ja', value: true },
+      { label: 'Nein', value: false },
+    ]
+    return (
+      <Box flexDirection="column">
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <Text color="cyan" bold>Initial Commit erstellen?</Text>
+        <SelectInput
+          items={yesNoOptions}
+          initialSelectedIndex={0}
+          onSelect={(item) => {
+            setDoInitialCommit(item.value)
+            setStep(11)
+          }}
+        />
+      </Box>
+    )
+  }
+
+  if (step === 11) {
+    const yesNoOptions = [
+      { label: 'Ja', value: true },
+      { label: 'Nein', value: false },
+    ]
+    const defaultIndex = (createGithub !== 'none' && doInitialCommit) ? 0 : 1
+    return (
+      <Box flexDirection="column">
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <Text color="cyan" bold>Änderungen zu GitHub pushen?</Text>
+        <SelectInput
+          items={yesNoOptions}
+          initialSelectedIndex={defaultIndex}
+          onSelect={(item) => {
+            setDoPush(item.value)
+            setStep(12)
+          }}
+        />
+      </Box>
+    )
+  }
+
+  if (step === 12) {
+    const yesNoOptions = [
       { label: 'Ja, Dev-Server starten', value: true },
       { label: 'Nein, nur Projekt erstellen', value: false },
     ]
     return (
       <Box flexDirection="column">
+        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
         <Text color="cyan" bold>Dev-Server nach Erstellung starten?</Text>
         <Text color="gray">Startet `pnpm dev` im Projekt-Verzeichnis</Text>
         <SelectInput
@@ -521,7 +714,8 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
           initialSelectedIndex={0}
           onSelect={(item) => {
             setStartDevServer(item.value)
-            handleComplete()
+            // WICHTIG: Wert direkt übergeben wegen async setState!
+            handleComplete({ startDevServer: item.value })
           }}
         />
       </Box>

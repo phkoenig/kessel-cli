@@ -29,18 +29,30 @@ function initLog(projectPath, projectName) {
   logFile.write(`# ================================================\n\n`)
 }
 
+let logClosed = false
+
 function writeLog(message, level = 'INFO') {
   const timestamp = new Date().toISOString()
   const line = `[${timestamp}] [${level}] ${message}\n`
-  if (logFile) {
-    logFile.write(line)
+  // Prüfe ob Stream noch offen und beschreibbar ist
+  if (logFile && !logClosed && logFile.writable) {
+    try {
+      logFile.write(line)
+    } catch (e) {
+      // Ignoriere Schreibfehler nach Stream-Ende
+    }
   }
 }
 
 function closeLog() {
-  if (logFile) {
-    writeLog(`Log abgeschlossen`, 'INFO')
-    logFile.end()
+  if (logFile && !logClosed) {
+    try {
+      logFile.write(`[${new Date().toISOString()}] [INFO] Log abgeschlossen\n`)
+      logFile.end()
+    } catch (e) {
+      // Ignoriere Fehler beim Schließen
+    }
+    logClosed = true
   }
   return logPath
 }
@@ -66,7 +78,13 @@ function withTimeout(promise, ms, operation) {
  * @returns {Object} Objekt mit tasks-Array und listr-Instanz
  */
 export function createProjectTasks(config, ctx, projectPath, options = {}) {
-  const { verbose } = options
+  const { verbose, dryRun } = options
+  
+  // WICHTIG: projectPath MUSS aus config kommen, falls als Parameter fehlt
+  const finalProjectPath = projectPath || config?.projectPath
+  if (!finalProjectPath) {
+    throw new Error('projectPath ist nicht gesetzt! Bitte Installationsordner im Wizard angeben.')
+  }
   
   // Log wird erst nach Template-Klonen initialisiert (wenn Verzeichnis existiert)
   let logInitialized = false
@@ -92,8 +110,9 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
   // Funktion um Log zu initialisieren (wird nach Template-Klonen aufgerufen)
   const initializeLog = () => {
     try {
-      initLog(projectPath, config.projectName)
+      initLog(finalProjectPath, config.projectName)
       writeLog(`Starte Projekt-Erstellung: ${config.projectName}`)
+      writeLog(`Pfad: ${finalProjectPath}`)
       writeLog(`INFRA-DB: ${config.infraDb.url}`)
       writeLog(`DEV-DB: ${config.devDb.url}`)
       writeLog(`Schema: ${config.schemaName}`)
@@ -111,6 +130,12 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
     {
       title: "1/12: GitHub Repository erstellen",
       task: async (taskCtx, task) => {
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: GitHub Repository würde erstellt werden`)
+          task.title = "1/12: GitHub Repository (DRY-RUN) ✓"
+          return Promise.resolve()
+        }
+        
         writeLog(`Task 1/12: GitHub Repository`, 'TASK')
         debug(taskCtx, `🚀 GitHub Task gestartet`)
         debug(taskCtx, `createGithub: ${config.createGithub}`)
@@ -120,6 +145,13 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
           debug(taskCtx, `GitHub übersprungen (config.createGithub === 'none')`)
           writeLog(`GitHub übersprungen`, 'SKIP')
           task.skip("GitHub Repo-Erstellung übersprungen")
+          return
+        }
+        
+        // Prüfe ob GitHub Token vorhanden ist
+        if (!ctx.githubToken) {
+          debug(taskCtx, `GitHub Token fehlt - überspringe Repository-Erstellung`)
+          task.title = "1/12: GitHub Repository ⚠ (Token fehlt - manuell erstellen)"
           return
         }
         
@@ -210,15 +242,21 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
     {
       title: "2/12: Template klonen",
       task: async (taskCtx, task) => {
-        debug(taskCtx, `Prüfe Zielverzeichnis: ${projectPath}`)
+        debug(taskCtx, `Prüfe Zielverzeichnis: ${finalProjectPath}`)
+        
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: Template würde geklont werden nach ${finalProjectPath}`)
+          task.title = "2/12: Template klonen (DRY-RUN) ✓"
+          return
+        }
         
         // Prüfe ob Verzeichnis bereits existiert
-        if (fs.existsSync(projectPath)) {
-          const files = fs.readdirSync(projectPath)
+        if (fs.existsSync(finalProjectPath)) {
+          const files = fs.readdirSync(finalProjectPath)
           if (files.length > 0) {
             debug(taskCtx, `Verzeichnis existiert bereits mit ${files.length} Dateien`)
             // Prüfe ob es ein Kessel-Projekt ist (package.json existiert)
-            if (fs.existsSync(path.join(projectPath, 'package.json'))) {
+            if (fs.existsSync(path.join(finalProjectPath, 'package.json'))) {
               debug(taskCtx, `Bestehendes Kessel-Projekt gefunden, überspringe Klonen`)
               task.title = "2/12: Bestehendes Projekt verwendet ✓"
               initializeLog() // Log initialisieren
@@ -231,9 +269,9 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
           const templateRepo = "phkoenig/kessel-boilerplate"
           const gitUrl = `https://${ctx.githubToken}@github.com/${templateRepo}.git`
           
-          debug(taskCtx, `Git clone: ${templateRepo} → ${projectPath}`)
+          debug(taskCtx, `Git clone: ${templateRepo} → ${finalProjectPath}`)
           execSync(
-            `git clone --depth 1 --branch main ${gitUrl} ${projectPath}`,
+            `git clone --depth 1 --branch main ${gitUrl} ${finalProjectPath}`,
             {
               stdio: "pipe",
               env: {
@@ -244,12 +282,23 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
           )
           
           // Entferne .git Verzeichnis
-          const gitPath = path.join(projectPath, ".git")
+          const gitPath = path.join(finalProjectPath, ".git")
           if (fs.existsSync(gitPath)) {
             fs.rmSync(gitPath, { recursive: true, force: true })
           }
           
           debug(taskCtx, `Template erfolgreich geklont`)
+          
+          // Package.json mit korrektem Projektnamen aktualisieren
+          const pkgPath = path.join(finalProjectPath, 'package.json')
+          if (fs.existsSync(pkgPath)) {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+            pkg.name = config.projectName
+            pkg.version = '0.1.0'
+            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
+            debug(taskCtx, `package.json aktualisiert: name=${config.projectName}`)
+          }
+          
           task.title = "2/12: Template geklont ✓"
           initializeLog() // Log initialisieren
         } catch (error) {
@@ -262,8 +311,19 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
               cache: false,
               force: true,
             })
-            await emitter.clone(projectPath)
+            await emitter.clone(finalProjectPath)
             debug(taskCtx, `Degit erfolgreich`)
+            
+            // Package.json mit korrektem Projektnamen aktualisieren
+            const pkgPath = path.join(finalProjectPath, 'package.json')
+            if (fs.existsSync(pkgPath)) {
+              const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+              pkg.name = config.projectName
+              pkg.version = '0.1.0'
+              fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
+              debug(taskCtx, `package.json aktualisiert: name=${config.projectName}`)
+            }
+            
             task.title = "2/12: Template geklont (degit) ✓"
             initializeLog() // Log initialisieren
           } catch (degitError) {
@@ -277,19 +337,25 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
     {
       title: "3/12: Bootstrap-Credentials (.env)",
       task: async (taskCtx, task) => {
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: .env würde erstellt werden`)
+          task.title = "3/12: .env (DRY-RUN) ✓"
+          return
+        }
+        
         const envContent = `# Bootstrap-Credentials für Vault-Zugriff (INFRA-DB)
 # WICHTIG: Dies ist die URL der INFRA-DB (Kessel) mit integriertem Vault
 NEXT_PUBLIC_SUPABASE_URL=${config.infraDb.url}
 SERVICE_ROLE_KEY=${config.serviceRoleKey}
 `
-        fs.writeFileSync(path.join(projectPath, ".env"), envContent)
+        fs.writeFileSync(path.join(finalProjectPath, ".env"), envContent)
         task.title = "3/12: .env erstellt ✓"
       },
     },
     {
       title: "4/12: Public-Credentials (.env.local)",
       task: async (taskCtx, task) => {
-        // Hole Anon Key falls noch nicht vorhanden
+        // Hole Anon Key falls noch nicht vorhanden (auch im Dry-Run)
         if (!ctx.anonKey) {
           ctx.anonKey = await fetchAnonKeyFromSupabase(config.infraDb.projectRef, () => {})
         }
@@ -298,17 +364,23 @@ SERVICE_ROLE_KEY=${config.serviceRoleKey}
           throw new Error("Anon Key konnte nicht abgerufen werden")
         }
         
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: .env.local würde erstellt werden`)
+          task.title = "4/12: .env.local (DRY-RUN) ✓"
+          return
+        }
+        
         const cleanAnonKey = ctx.anonKey.replace(/\x1b\[[0-9;]*m/g, '').replace(/\u001b\[\d+m/g, '').trim()
         const cleanServiceRoleKey = ctx.serviceRoleKey.replace(/\x1b\[[0-9;]*m/g, '').replace(/\u001b\[\d+m/g, '').trim()
         
         const envLocalContent = `# Public-Credentials für Next.js Client
 # Multi-Tenant Architektur: INFRA-DB (Auth, Vault) + DEV-DB (App-Daten)
-# Jedes Projekt hat ein eigenes Schema für Daten-Isolation
+# Tenant-Isolation erfolgt über RLS Policies basierend auf tenant_id im JWT
 
 # INFRA-DB (Kessel) - Auth, Vault, Multi-Tenant
 NEXT_PUBLIC_SUPABASE_URL=${config.infraDb.url}
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${cleanAnonKey}
-NEXT_PUBLIC_PROJECT_SCHEMA=${config.schemaName}
+NEXT_PUBLIC_TENANT_SLUG=${config.schemaName}
 
 # DEV-DB - App-Daten, Entwicklung
 # Hinweis: Kann gleich INFRA-DB sein oder separate DB für fachliche Daten
@@ -323,27 +395,33 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
 # Auth-Bypass aktiviert den DevUserSelector auf der Login-Seite
 NEXT_PUBLIC_AUTH_BYPASS=true
 `
-        fs.writeFileSync(path.join(projectPath, ".env.local"), envLocalContent)
+        fs.writeFileSync(path.join(finalProjectPath, ".env.local"), envLocalContent)
         task.title = "4/12: .env.local erstellt ✓"
       },
     },
     {
       title: "5/12: Git initialisieren",
       task: async (taskCtx, task) => {
-        const gitDir = path.join(projectPath, ".git")
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: Git würde initialisiert werden`)
+          task.title = "5/12: Git initialisieren (DRY-RUN) ✓"
+          return
+        }
+        
+        const gitDir = path.join(finalProjectPath, ".git")
         if (!fs.existsSync(gitDir)) {
-          execSync("git init", { cwd: projectPath, stdio: "ignore" })
+          execSync("git init", { cwd: finalProjectPath, stdio: "ignore" })
         }
         
         if (ctx.repoUrl) {
           const remoteUrl = ctx.repoUrl.replace("https://", `https://${ctx.githubToken}@`)
           try {
-            execSync("git remote remove origin", { cwd: projectPath, stdio: "ignore" })
+            execSync("git remote remove origin", { cwd: finalProjectPath, stdio: "ignore" })
           } catch {
             // Ignorieren falls nicht vorhanden
           }
           execSync(`git remote add origin ${ctx.repoUrl}`, {
-            cwd: projectPath,
+            cwd: finalProjectPath,
             stdio: "ignore",
           })
         }
@@ -359,8 +437,14 @@ NEXT_PUBLIC_AUTH_BYPASS=true
           return
         }
         
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: Dependencies würden installiert werden`)
+          task.title = "6/12: Dependencies installieren (DRY-RUN) ✓"
+          return
+        }
+        
         const installCmd = ctx.packageManager?.installCommand || "pnpm install"
-        execSync(installCmd, { cwd: projectPath, stdio: "inherit" })
+        execSync(installCmd, { cwd: finalProjectPath, stdio: "inherit" })
         task.title = "6/12: Dependencies installiert ✓"
       },
       skip: () => !config.autoInstallDeps,
@@ -368,9 +452,15 @@ NEXT_PUBLIC_AUTH_BYPASS=true
     {
       title: "7/12: Supabase Link",
       task: async (taskCtx, task) => {
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: Supabase würde verlinkt werden`)
+          task.title = "7/12: Supabase Link (DRY-RUN) ✓"
+          return
+        }
+        
         try {
           execSync(`supabase link --project-ref ${config.infraDb.projectRef}`, {
-            cwd: projectPath,
+            cwd: finalProjectPath,
             stdio: "pipe",
           })
           task.title = "7/12: INFRA-DB verlinkt ✓"
@@ -380,58 +470,84 @@ NEXT_PUBLIC_AUTH_BYPASS=true
       },
     },
     {
-      title: "8/12: Multi-Tenant Schema erstellen",
+      title: "8/12: Tenant erstellen",
       task: async (taskCtx, task) => {
-        debug(taskCtx, `Erstelle Schema: ${config.schemaName}`)
+        debug(taskCtx, `Erstelle Tenant: ${config.schemaName}`)
         
-        // Schema über Supabase REST API erstellen
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: Tenant würde erstellt werden`)
+          task.title = `8/12: Tenant "${config.schemaName}" (DRY-RUN) ✓`
+          return
+        }
+        
+        if (!ctx.serviceRoleKey || !config.infraDb?.url) {
+          debug(taskCtx, `Service Role Key oder INFRA-DB URL fehlt`)
+          task.title = `8/12: Tenant erstellen ⚠ (Service Role Key fehlt)`
+          ctx.tenantId = null
+          return
+        }
+        
         try {
-          const sql = `
-            -- Schema erstellen falls nicht vorhanden
-            CREATE SCHEMA IF NOT EXISTS "${config.schemaName}";
-            
-            -- Grant für authenticated und anon
-            GRANT USAGE ON SCHEMA "${config.schemaName}" TO authenticated, anon;
-            GRANT ALL ON ALL TABLES IN SCHEMA "${config.schemaName}" TO authenticated;
-            GRANT SELECT ON ALL TABLES IN SCHEMA "${config.schemaName}" TO anon;
-            
-            -- Default privileges für zukünftige Tabellen
-            ALTER DEFAULT PRIVILEGES IN SCHEMA "${config.schemaName}" 
-              GRANT ALL ON TABLES TO authenticated;
-            ALTER DEFAULT PRIVILEGES IN SCHEMA "${config.schemaName}" 
-              GRANT SELECT ON TABLES TO anon;
-          `
+          const { createTenant } = await import('../utils/supabase.js')
+          const tenantResult = await createTenant(
+            config.infraDb.url,
+            ctx.serviceRoleKey,
+            config.schemaName, // slug
+            config.projectName, // name
+            verbose
+          )
           
-          const response = await fetch(`${config.infraDb.url}/rest/v1/rpc/exec_sql`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': ctx.serviceRoleKey,
-              'Authorization': `Bearer ${ctx.serviceRoleKey}`,
-            },
-            body: JSON.stringify({ sql_query: sql }),
-          })
-          
-          if (!response.ok) {
-            // Fallback: Versuche direkt über SQL-Endpoint
-            debug(taskCtx, `exec_sql nicht verfügbar, Schema wird beim ersten Start erstellt`)
-            task.title = `8/12: Schema "${config.schemaName}" ⚠ (wird bei Migration erstellt)`
-            return
+          if (tenantResult.success && tenantResult.tenantId) {
+            ctx.tenantId = tenantResult.tenantId
+            debug(taskCtx, `Tenant erstellt: ${tenantResult.tenantId}`)
+            writeLog(`Tenant erstellt: ${config.schemaName} (${tenantResult.tenantId})`, 'OK')
+            
+            // Alle Themes in tenant-Ordner kopieren
+            try {
+              const { copyDefaultTheme } = await import('../utils/supabase.js')
+              const themeResult = await copyDefaultTheme(
+                config.infraDb.url,
+                ctx.serviceRoleKey,
+                config.schemaName,
+                verbose
+              )
+              if (themeResult.success) {
+                const count = themeResult.copied?.length || 0
+                debug(taskCtx, `${count} Themes kopiert nach ${config.schemaName}/`)
+                writeLog(`${count} Themes kopiert: ${themeResult.copied?.join(', ') || 'keine'}`, 'OK')
+              } else {
+                debug(taskCtx, `Theme-Kopieren fehlgeschlagen: ${themeResult.error}`)
+              }
+            } catch (themeError) {
+              debug(taskCtx, `Theme-Warnung: ${themeError.message}`)
+            }
+            
+            task.title = `8/12: Tenant "${config.schemaName}" erstellt ✓`
+          } else {
+            debug(taskCtx, `Tenant-Erstellung fehlgeschlagen: ${tenantResult.error}`)
+            writeLog(`Tenant-Erstellung fehlgeschlagen: ${tenantResult.error}`, 'ERROR')
+            task.title = `8/12: Tenant erstellen ✗ (${tenantResult.error})`
+            ctx.tenantId = null
           }
-          
-          debug(taskCtx, `Schema "${config.schemaName}" erstellt`)
-          task.title = `8/12: Schema "${config.schemaName}" erstellt ✓`
         } catch (error) {
-          debug(taskCtx, `Schema-Erstellung Fehler: ${error.message}`)
-          task.title = `8/12: Schema "${config.schemaName}" ⚠ (manuell erstellen)`
+          debug(taskCtx, `Fehler bei Tenant-Erstellung: ${error.message}`)
+          writeLog(`Fehler bei Tenant-Erstellung: ${error.message}`, 'ERROR')
+          task.title = `8/12: Tenant erstellen ✗`
+          ctx.tenantId = null
         }
       },
     },
     {
       title: "9/12: Datenbank-Migrationen",
       task: async (taskCtx, task) => {
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: Migrationen würden ausgeführt werden`)
+          task.title = "9/12: Migrationen (DRY-RUN) ✓"
+          return
+        }
+        
         debug(taskCtx, `Migration-Script suchen...`)
-        const migrationScript = path.join(projectPath, "scripts", "apply-migrations-to-schema.mjs")
+        const migrationScript = path.join(finalProjectPath, "scripts", "apply-migrations-to-schema.mjs")
         if (!fs.existsSync(migrationScript)) {
           debug(taskCtx, `Migration-Script nicht gefunden: ${migrationScript}`)
           task.skip("Migration-Script nicht gefunden")
@@ -446,9 +562,15 @@ NEXT_PUBLIC_AUTH_BYPASS=true
       },
     },
     {
-      title: "10/12: Standard-User prüfen",
+      title: "10/12: Standard-User prüfen und zu Tenant zuordnen",
       task: async (taskCtx, task) => {
-        const createUsersScript = path.join(projectPath, "scripts", "create-test-users.mjs")
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: Standard-User würden erstellt werden`)
+          task.title = "10/12: Standard-User (DRY-RUN) ✓"
+          return
+        }
+        
+        const createUsersScript = path.join(finalProjectPath, "scripts", "create-test-users.mjs")
         if (!fs.existsSync(createUsersScript)) {
           task.skip("User-Script nicht gefunden")
           return
@@ -462,10 +584,27 @@ NEXT_PUBLIC_AUTH_BYPASS=true
           }
           
           execSync("node scripts/create-test-users.mjs", {
-            cwd: projectPath,
+            cwd: finalProjectPath,
             stdio: "inherit",
             env: userEnv,
           })
+          
+          // User zu Tenant zuordnen (falls Tenant erstellt wurde)
+          if (ctx.tenantId && ctx.serviceRoleKey && config.infraDb?.url) {
+            try {
+              const { assignUserToTenant } = await import('../utils/supabase.js')
+              
+              // Hole User-IDs aus der Datenbank (admin@local, user@local)
+              // Für jetzt: Versuche User zu finden und zuzuordnen
+              // TODO: Bessere User-ID-Ermittlung implementieren
+              debug(taskCtx, `User-Tenant-Zuordnung wird übersprungen (muss manuell erfolgen)`)
+              writeLog(`User-Tenant-Zuordnung: Muss manuell erfolgen`, 'INFO')
+            } catch (assignError) {
+              debug(taskCtx, `Fehler bei User-Tenant-Zuordnung: ${assignError.message}`)
+              writeLog(`Fehler bei User-Tenant-Zuordnung: ${assignError.message}`, 'WARN')
+            }
+          }
+          
           task.title = "10/12: Standard-User erstellt ✓"
         } catch (error) {
           task.title = "10/12: Standard-User ⚠"
@@ -480,9 +619,15 @@ NEXT_PUBLIC_AUTH_BYPASS=true
           return
         }
         
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: Vercel würde verlinkt werden`)
+          task.title = "11/12: Vercel Link (DRY-RUN) ✓"
+          return
+        }
+        
         try {
           execSync("vercel link --yes", {
-            cwd: projectPath,
+            cwd: finalProjectPath,
             stdio: "pipe",
           })
           task.title = "11/12: Vercel verlinkt ✓"
@@ -495,8 +640,14 @@ NEXT_PUBLIC_AUTH_BYPASS=true
     {
       title: "12/12: MCP-Konfiguration aktualisieren",
       task: async (taskCtx, task) => {
-        const mcpConfigPath = path.join(projectPath, ".cursor", "mcp.json")
-        const cursorDir = path.join(projectPath, ".cursor")
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: MCP-Konfiguration würde aktualisiert werden`)
+          task.title = "12/12: MCP-Konfiguration (DRY-RUN) ✓"
+          return
+        }
+        
+        const mcpConfigPath = path.join(finalProjectPath, ".cursor", "mcp.json")
+        const cursorDir = path.join(finalProjectPath, ".cursor")
         
         if (!fs.existsSync(cursorDir)) {
           fs.mkdirSync(cursorDir, { recursive: true })
@@ -522,7 +673,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
         }
         
         fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2))
-        task.title = "11/12: MCP-Konfiguration aktualisiert ✓"
+        task.title = "12/12: MCP-Konfiguration aktualisiert ✓"
       },
     },
     {
@@ -533,8 +684,9 @@ NEXT_PUBLIC_AUTH_BYPASS=true
         writeLog(`# ZUSAMMENFASSUNG`, 'INFO')
         writeLog(`# ================================================`, 'INFO')
         writeLog(`Projekt: ${config.projectName}`, 'INFO')
-        writeLog(`Pfad: ${projectPath}`, 'INFO')
-        writeLog(`Schema: ${config.schemaName}`, 'INFO')
+        writeLog(`Pfad: ${finalProjectPath}`, 'INFO')
+        writeLog(`Tenant Slug: ${config.schemaName}`, 'INFO')
+        writeLog(`Tenant ID: ${ctx.tenantId || 'nicht erstellt'}`, 'INFO')
         writeLog(`INFRA-DB: ${config.infraDb.url}`, 'INFO')
         writeLog(`DEV-DB: ${config.devDb.url}`, 'INFO')
         writeLog(`GitHub: ${ctx.repoUrl || 'nicht erstellt'}`, 'INFO')
