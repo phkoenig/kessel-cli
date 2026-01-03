@@ -454,6 +454,15 @@ NEXT_PUBLIC_AUTH_BYPASS=true
         
         const installCmd = ctx.packageManager?.installCommand || "pnpm install"
         execSync(installCmd, { cwd: finalProjectPath, stdio: "inherit" })
+        
+        // Generiere version.ts (wird für System-Info benötigt)
+        try {
+          execSync("pnpm version:write", { cwd: finalProjectPath, stdio: "ignore" })
+          debug(taskCtx, "version.ts generiert")
+        } catch {
+          debug(taskCtx, "version:write übersprungen (optional)")
+        }
+        
         task.title = "6/12: Dependencies installiert ✓"
       },
       skip: () => !config.autoInstallDeps,
