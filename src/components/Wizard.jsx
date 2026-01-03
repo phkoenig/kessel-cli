@@ -554,27 +554,53 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
       )
     }
     
+    // Wenn Passwort aus Vault geladen wurde: Ja/Nein-Auswahl
+    if (dbPasswordFromVault && dbPassword) {
+      const confirmOptions = [
+        { label: 'Ja, verwenden', value: 'use' },
+        { label: 'Nein, anderes eingeben', value: 'change' },
+        { label: 'Überspringen (kein DB-Passwort)', value: 'skip' },
+      ]
+      
+      return (
+        <Box flexDirection="column">
+          <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+          <Text color="cyan" bold>DB-Passwort (optional):</Text>
+          <Text color="green">✓ Aus Vault geladen (SUPABASE_DB_PASSWORD)</Text>
+          <Text color="gray">Passwort: {dbPassword.substring(0, 4)}{'*'.repeat(Math.max(0, dbPassword.length - 4))}</Text>
+          <Box marginTop={1}>
+            <Text color="cyan">Dieses Passwort verwenden?</Text>
+          </Box>
+          <SelectInput
+            items={confirmOptions}
+            onSelect={(item) => {
+              if (item.value === 'use') {
+                setDbPasswordSubmitted(true)
+                setStep(7)
+              } else if (item.value === 'change') {
+                setDbPasswordFromVault(false)
+                setDbPassword('')
+              } else {
+                setDbPassword('')
+                setDbPasswordSubmitted(true)
+                setStep(7)
+              }
+            }}
+          />
+        </Box>
+      )
+    }
+    
+    // Manuelle Eingabe
     return (
       <Box flexDirection="column">
         <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
         <Text color="cyan" bold>DB-Passwort (optional):</Text>
-        {dbPasswordFromVault ? (
-          <Text color="green">✓ Aus Vault geladen (SUPABASE_DB_PASSWORD)</Text>
-        ) : (
-          <>
-            <Text color="gray">Für automatische Schema-Konfiguration (PostgREST)</Text>
-            <Text color="gray">Leer lassen = später manuell via Migration</Text>
-          </>
-        )}
+        <Text color="gray">Für automatische Schema-Konfiguration (PostgREST)</Text>
+        <Text color="gray">Leer lassen = später manuell via Migration</Text>
         <TextInput
           value={dbPassword}
-          onChange={(value) => {
-            setDbPassword(value)
-            // Wenn User ändert, ist es nicht mehr aus Vault
-            if (dbPasswordFromVault && value !== dbPassword) {
-              setDbPasswordFromVault(false)
-            }
-          }}
+          onChange={setDbPassword}
           onSubmit={(value) => {
             if (value.trim()) {
               setDbPassword(value.trim())
@@ -585,7 +611,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
         />
         <Text color="gray" marginTop={1}>
           {dbPassword 
-            ? (dbPasswordFromVault ? '↵ Enter zum Bestätigen' : '✓ Passwort eingegeben')
+            ? '✓ Passwort eingegeben - Enter zum Fortfahren'
             : 'Leer lassen = Migration-Datei wird erstellt'}
         </Text>
       </Box>
