@@ -373,9 +373,18 @@ SERVICE_ROLE_KEY=${config.serviceRoleKey}
         const cleanAnonKey = ctx.anonKey.replace(/\x1b\[[0-9;]*m/g, '').replace(/\u001b\[\d+m/g, '').trim()
         const cleanServiceRoleKey = ctx.serviceRoleKey.replace(/\x1b\[[0-9;]*m/g, '').replace(/\u001b\[\d+m/g, '').trim()
         
+        // App-Name aus Projektname generieren (Titel-Case)
+        const appName = config.projectName
+          .split(/[-_]/)
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ')
+        
         const envLocalContent = `# Public-Credentials für Next.js Client
 # Multi-Tenant Architektur: INFRA-DB (Auth, Vault) + DEV-DB (App-Daten)
 # Tenant-Isolation erfolgt über RLS Policies basierend auf tenant_id im JWT
+
+# App-Name (wird im UI angezeigt)
+NEXT_PUBLIC_APP_NAME=${appName}
 
 # INFRA-DB (Kessel) - Auth, Vault, Multi-Tenant
 NEXT_PUBLIC_SUPABASE_URL=${config.infraDb.url}
