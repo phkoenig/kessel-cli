@@ -554,13 +554,13 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
       )
     }
     
-    // Wenn Passwort aus Vault geladen wurde: Ja/Nein-Auswahl
-    if (dbPasswordFromVault && dbPassword) {
-      const confirmOptions = [
-        { label: 'Ja, verwenden', value: 'use' },
-        { label: 'Nein, anderes eingeben', value: 'change' },
-        { label: 'Überspringen (kein DB-Passwort)', value: 'skip' },
-      ]
+    // Wenn Passwort aus Vault geladen wurde: Automatisch übernehmen und weitermachen
+    if (dbPasswordFromVault && dbPassword && !dbPasswordSubmitted) {
+      // Auto-advance nach kurzer Anzeige
+      setTimeout(() => {
+        setDbPasswordSubmitted(true)
+        setStep(7)
+      }, 500)
       
       return (
         <Box flexDirection="column">
@@ -568,30 +568,12 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
           <Text color="cyan" bold>DB-Passwort (optional):</Text>
           <Text color="green">✓ Aus Vault geladen (SUPABASE_DB_PASSWORD)</Text>
           <Text color="gray">Passwort: {dbPassword.substring(0, 4)}{'*'.repeat(Math.max(0, dbPassword.length - 4))}</Text>
-          <Box marginTop={1}>
-            <Text color="cyan">Dieses Passwort verwenden?</Text>
-          </Box>
-          <SelectInput
-            items={confirmOptions}
-            onSelect={(item) => {
-              if (item.value === 'use') {
-                setDbPasswordSubmitted(true)
-                setStep(7)
-              } else if (item.value === 'change') {
-                setDbPasswordFromVault(false)
-                setDbPassword('')
-              } else {
-                setDbPassword('')
-                setDbPasswordSubmitted(true)
-                setStep(7)
-              }
-            }}
-          />
+          <Text color="green" marginTop={1}>→ Wird automatisch übernommen...</Text>
         </Box>
       )
     }
     
-    // Manuelle Eingabe
+    // Manuelle Eingabe (nur wenn kein Vault-Passwort)
     return (
       <Box flexDirection="column">
         <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
