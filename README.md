@@ -116,20 +116,21 @@ Die CLI unterstützt eine **Zwei-Datenbank-Architektur**:
 
 **Cursor MCP zeigt immer auf DEV-DB** - INFRA-DB wird über interne APIs angesprochen.
 
-## Was das Tool macht
+## Was das Tool macht (13 Schritte)
 
-1. **Pre-Checks** - GitHub CLI, Vercel CLI, Supabase CLI prüfen
-2. **Projekt-Setup** - Name abfragen
-3. **Supabase Config** - INFRA-DB und DEV-DB URLs konfigurieren
-4. **Template klonen** - von `phkoenig/kessel-boilerplate`
-5. **Credentials konfigurieren** - `.env` (INFRA-DB) und `.env.local` (DEV-DB + Schema)
-6. **Git initialisieren** - Repository erstellen und verknüpfen
-7. **Dependencies installieren** - mit pnpm
-8. **Schema erstellen** - Neues Schema in der INFRA-DB (Multi-Tenant)
-9. **Datenbank-Migrationen** - Alle Tabellen im Schema erstellen
-10. **Standard-User prüfen** - Shared Auth
-11. **Vercel Link** - Optional Vercel-Projekt verknüpfen
-12. **Validierung** - Automatische Prüfung der Konfiguration
+1. **GitHub Repository** - Erstellen (public/private) oder überspringen
+2. **Template klonen** - von `phkoenig/kessel-boilerplate`
+3. **Bootstrap-Credentials (.env)** - INFRA-DB URL + Service Role Key
+4. **Public-Credentials (.env.local)** - Anon Key, Tenant-Slug, App-Name
+5. **Git initialisieren** - Repository erstellen und verknüpfen
+6. **Dependencies installieren** - mit pnpm
+7. **🆕 Secrets aus Vault laden** - `pnpm pull-env` für API-Keys (OPENROUTER, FAL, etc.)
+8. **Supabase Link** - Projekt mit INFRA-DB verknüpfen
+9. **Tenant erstellen** - RLS-basierte Multi-Tenant-Isolation
+10. **Datenbank-Migrationen** - Alle Tabellen im Schema erstellen
+11. **Standard-User prüfen** - Shared Auth User zu Tenant zuordnen
+12. **Vercel Link** - Optional Vercel-Projekt verknüpfen
+13. **MCP-Konfiguration** - Cursor MCP für DEV-DB einrichten
 
 ### Multi-Tenant Architektur
 

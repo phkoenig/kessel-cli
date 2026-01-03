@@ -128,15 +128,15 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
 
   const taskDefinitions = [
     {
-      title: "1/12: GitHub Repository erstellen",
+      title: "1/13: GitHub Repository erstellen",
       task: async (taskCtx, task) => {
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: GitHub Repository würde erstellt werden`)
-          task.title = "1/12: GitHub Repository (DRY-RUN) ✓"
+          task.title = "1/13: GitHub Repository (DRY-RUN) ✓"
           return Promise.resolve()
         }
         
-        writeLog(`Task 1/12: GitHub Repository`, 'TASK')
+        writeLog(`Task 1/13: GitHub Repository`, 'TASK')
         debug(taskCtx, `🚀 GitHub Task gestartet`)
         debug(taskCtx, `createGithub: ${config.createGithub}`)
         debug(taskCtx, `projectName: ${config.projectName}`)
@@ -151,7 +151,7 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
         // Prüfe ob GitHub Token vorhanden ist
         if (!ctx.githubToken) {
           debug(taskCtx, `GitHub Token fehlt - überspringe Repository-Erstellung`)
-          task.title = "1/12: GitHub Repository ⚠ (Token fehlt - manuell erstellen)"
+          task.title = "1/13: GitHub Repository ⚠ (Token fehlt - manuell erstellen)"
           return
         }
         
@@ -191,7 +191,7 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
             ctx.repoUrl = existingRepo.html_url
             debug(taskCtx, `✓ Repo existiert bereits: ${existingRepo.html_url}`)
             writeLog(`Repo existiert: ${existingRepo.html_url}`, 'OK')
-            task.title = `1/12: GitHub Repository existiert bereits ✓ (${existingRepo.html_url})`
+            task.title = `1/13: GitHub Repository existiert bereits ✓ (${existingRepo.html_url})`
             return
           } catch (e) {
             // 404 = Repo existiert nicht, das ist OK
@@ -220,33 +220,33 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
           ctx.repoUrl = repo.html_url
           debug(taskCtx, `✓ Repo erstellt: ${repo.html_url}`)
           writeLog(`Repo erstellt: ${repo.html_url}`, 'OK')
-          task.title = `1/12: GitHub Repository erstellt ✓ (${repo.html_url})`
+          task.title = `1/13: GitHub Repository erstellt ✓ (${repo.html_url})`
         } catch (error) {
           debug(taskCtx, `✗ GitHub Fehler: ${error.message}`)
           writeLog(`GitHub Fehler: ${error.message}`, 'ERROR')
           
           // Bei Timeout oder 422 trotzdem weitermachen
           if (error.message.includes('Timeout')) {
-            task.title = `1/12: GitHub Repository ⚠ (Timeout - manuell prüfen)`
+            task.title = `1/13: GitHub Repository ⚠ (Timeout - manuell prüfen)`
             return
           }
           if (error.message.includes('already exists') || error.status === 422) {
-            task.title = `1/12: GitHub Repository existiert bereits ⚠`
+            task.title = `1/13: GitHub Repository existiert bereits ⚠`
             return
           }
-          task.title = `1/12: GitHub Repository ✗ (${error.message})`
+          task.title = `1/13: GitHub Repository ✗ (${error.message})`
           throw error
         }
       },
     },
     {
-      title: "2/12: Template klonen",
+      title: "2/13: Template klonen",
       task: async (taskCtx, task) => {
         debug(taskCtx, `Prüfe Zielverzeichnis: ${finalProjectPath}`)
         
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: Template würde geklont werden nach ${finalProjectPath}`)
-          task.title = "2/12: Template klonen (DRY-RUN) ✓"
+          task.title = "2/13: Template klonen (DRY-RUN) ✓"
           return
         }
         
@@ -258,7 +258,7 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
             // Prüfe ob es ein Kessel-Projekt ist (package.json existiert)
             if (fs.existsSync(path.join(finalProjectPath, 'package.json'))) {
               debug(taskCtx, `Bestehendes Kessel-Projekt gefunden, überspringe Klonen`)
-              task.title = "2/12: Bestehendes Projekt verwendet ✓"
+              task.title = "2/13: Bestehendes Projekt verwendet ✓"
               initializeLog() // Log initialisieren
               return
             }
@@ -299,7 +299,7 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
             debug(taskCtx, `package.json aktualisiert: name=${config.projectName}`)
           }
           
-          task.title = "2/12: Template geklont ✓"
+          task.title = "2/13: Template geklont ✓"
           initializeLog() // Log initialisieren
         } catch (error) {
           debug(taskCtx, `Git clone fehlgeschlagen: ${error.message}`)
@@ -324,22 +324,22 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
               debug(taskCtx, `package.json aktualisiert: name=${config.projectName}`)
             }
             
-            task.title = "2/12: Template geklont (degit) ✓"
+            task.title = "2/13: Template geklont (degit) ✓"
             initializeLog() // Log initialisieren
           } catch (degitError) {
             debug(taskCtx, `Degit auch fehlgeschlagen: ${degitError.message}`)
-            task.title = `2/12: Template klonen ✗`
+            task.title = `2/13: Template klonen ✗`
             throw new Error(`Git: ${error.message}, Degit: ${degitError.message}`)
           }
         }
       },
     },
     {
-      title: "3/12: Bootstrap-Credentials (.env)",
+      title: "3/13: Bootstrap-Credentials (.env)",
       task: async (taskCtx, task) => {
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: .env würde erstellt werden`)
-          task.title = "3/12: .env (DRY-RUN) ✓"
+          task.title = "3/13: .env (DRY-RUN) ✓"
           return
         }
         
@@ -349,11 +349,11 @@ NEXT_PUBLIC_SUPABASE_URL=${config.infraDb.url}
 SERVICE_ROLE_KEY=${config.serviceRoleKey}
 `
         fs.writeFileSync(path.join(finalProjectPath, ".env"), envContent)
-        task.title = "3/12: .env erstellt ✓"
+        task.title = "3/13: .env erstellt ✓"
       },
     },
     {
-      title: "4/12: Public-Credentials (.env.local)",
+      title: "4/13: Public-Credentials (.env.local)",
       task: async (taskCtx, task) => {
         // Hole Anon Key falls noch nicht vorhanden (auch im Dry-Run)
         if (!ctx.anonKey) {
@@ -366,7 +366,7 @@ SERVICE_ROLE_KEY=${config.serviceRoleKey}
         
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: .env.local würde erstellt werden`)
-          task.title = "4/12: .env.local (DRY-RUN) ✓"
+          task.title = "4/13: .env.local (DRY-RUN) ✓"
           return
         }
         
@@ -405,15 +405,15 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
 NEXT_PUBLIC_AUTH_BYPASS=true
 `
         fs.writeFileSync(path.join(finalProjectPath, ".env.local"), envLocalContent)
-        task.title = "4/12: .env.local erstellt ✓"
+        task.title = "4/13: .env.local erstellt ✓"
       },
     },
     {
-      title: "5/12: Git initialisieren",
+      title: "5/13: Git initialisieren",
       task: async (taskCtx, task) => {
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: Git würde initialisiert werden`)
-          task.title = "5/12: Git initialisieren (DRY-RUN) ✓"
+          task.title = "5/13: Git initialisieren (DRY-RUN) ✓"
           return
         }
         
@@ -435,11 +435,11 @@ NEXT_PUBLIC_AUTH_BYPASS=true
           })
         }
         
-        task.title = "5/12: Git initialisiert ✓"
+        task.title = "5/13: Git initialisiert ✓"
       },
     },
     {
-      title: "6/12: Dependencies installieren",
+      title: "6/13: Dependencies installieren",
       task: async (taskCtx, task) => {
         if (!config.autoInstallDeps) {
           task.skip("Dependencies-Installation übersprungen")
@@ -448,7 +448,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
         
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: Dependencies würden installiert werden`)
-          task.title = "6/12: Dependencies installieren (DRY-RUN) ✓"
+          task.title = "6/13: Dependencies installieren (DRY-RUN) ✓"
           return
         }
         
@@ -463,16 +463,54 @@ NEXT_PUBLIC_AUTH_BYPASS=true
           debug(taskCtx, "version:write übersprungen (optional)")
         }
         
-        task.title = "6/12: Dependencies installiert ✓"
+        task.title = "6/13: Dependencies installiert ✓"
       },
       skip: () => !config.autoInstallDeps,
     },
     {
-      title: "7/12: Supabase Link",
+      title: "7/13: Secrets aus Vault laden (pnpm pull-env)",
+      task: async (taskCtx, task) => {
+        if (!config.autoInstallDeps) {
+          task.skip("Übersprungen (keine Dependencies installiert)")
+          return
+        }
+        
+        if (dryRun) {
+          debug(taskCtx, `DRY-RUN: pnpm pull-env würde ausgeführt werden`)
+          task.title = "7/13: Secrets aus Vault (DRY-RUN) ✓"
+          return
+        }
+        
+        try {
+          debug(taskCtx, `Führe pnpm pull-env aus...`)
+          execSync("pnpm pull-env", { 
+            cwd: finalProjectPath, 
+            stdio: "pipe",
+            env: {
+              ...process.env,
+              // Stelle sicher, dass die .env geladen wird
+              NEXT_PUBLIC_SUPABASE_URL: config.infraDb.url,
+              SERVICE_ROLE_KEY: ctx.serviceRoleKey,
+            }
+          })
+          debug(taskCtx, `Secrets erfolgreich aus Vault geladen`)
+          writeLog(`Secrets aus Vault geladen (pnpm pull-env)`, 'OK')
+          task.title = "7/13: Secrets aus Vault geladen ✓"
+        } catch (error) {
+          debug(taskCtx, `pull-env Fehler: ${error.message}`)
+          writeLog(`pull-env Fehler: ${error.message}`, 'WARN')
+          // Nicht kritisch - User kann manuell pnpm pull-env ausführen
+          task.title = "7/13: Secrets aus Vault ⚠ (manuell: pnpm pull-env)"
+        }
+      },
+      skip: () => !config.autoInstallDeps,
+    },
+    {
+      title: "8/13: Supabase Link",
       task: async (taskCtx, task) => {
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: Supabase würde verlinkt werden`)
-          task.title = "7/12: Supabase Link (DRY-RUN) ✓"
+          task.title = "8/13: Supabase Link (DRY-RUN) ✓"
           return
         }
         
@@ -481,26 +519,26 @@ NEXT_PUBLIC_AUTH_BYPASS=true
             cwd: finalProjectPath,
             stdio: "pipe",
           })
-          task.title = "7/12: INFRA-DB verlinkt ✓"
+          task.title = "8/13: INFRA-DB verlinkt ✓"
         } catch (error) {
-          task.title = "7/12: Supabase Link ⚠ (nicht kritisch)"
+          task.title = "8/13: Supabase Link ⚠ (nicht kritisch)"
         }
       },
     },
     {
-      title: "8/12: Tenant erstellen",
+      title: "9/13: Tenant erstellen",
       task: async (taskCtx, task) => {
         debug(taskCtx, `Erstelle Tenant: ${config.schemaName}`)
         
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: Tenant würde erstellt werden`)
-          task.title = `8/12: Tenant "${config.schemaName}" (DRY-RUN) ✓`
+          task.title = `9/13: Tenant "${config.schemaName}" (DRY-RUN) ✓`
           return
         }
         
         if (!ctx.serviceRoleKey || !config.infraDb?.url) {
           debug(taskCtx, `Service Role Key oder INFRA-DB URL fehlt`)
-          task.title = `8/12: Tenant erstellen ⚠ (Service Role Key fehlt)`
+          task.title = `9/13: Tenant erstellen ⚠ (Service Role Key fehlt)`
           ctx.tenantId = null
           return
         }
@@ -540,27 +578,27 @@ NEXT_PUBLIC_AUTH_BYPASS=true
               debug(taskCtx, `Theme-Warnung: ${themeError.message}`)
             }
             
-            task.title = `8/12: Tenant "${config.schemaName}" erstellt ✓`
+            task.title = `9/13: Tenant "${config.schemaName}" erstellt ✓`
           } else {
             debug(taskCtx, `Tenant-Erstellung fehlgeschlagen: ${tenantResult.error}`)
             writeLog(`Tenant-Erstellung fehlgeschlagen: ${tenantResult.error}`, 'ERROR')
-            task.title = `8/12: Tenant erstellen ✗ (${tenantResult.error})`
+            task.title = `9/13: Tenant erstellen ✗ (${tenantResult.error})`
             ctx.tenantId = null
           }
         } catch (error) {
           debug(taskCtx, `Fehler bei Tenant-Erstellung: ${error.message}`)
           writeLog(`Fehler bei Tenant-Erstellung: ${error.message}`, 'ERROR')
-          task.title = `8/12: Tenant erstellen ✗`
+          task.title = `9/13: Tenant erstellen ✗`
           ctx.tenantId = null
         }
       },
     },
     {
-      title: "9/12: Datenbank-Migrationen",
+      title: "10/13: Datenbank-Migrationen",
       task: async (taskCtx, task) => {
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: Migrationen würden ausgeführt werden`)
-          task.title = "9/12: Migrationen (DRY-RUN) ✓"
+          task.title = "10/13: Migrationen (DRY-RUN) ✓"
           return
         }
         
@@ -573,18 +611,18 @@ NEXT_PUBLIC_AUTH_BYPASS=true
         }
         
         debug(taskCtx, `Migrationen brauchen DB_PASSWORD - überspringe automatische Ausführung`)
-        task.title = "9/12: Migrationen ⚠ (manuell: pnpm db:migrate)"
+        task.title = "10/13: Migrationen ⚠ (manuell: pnpm db:migrate)"
         
         // Info für User
         ctx.migrationPending = true
       },
     },
     {
-      title: "10/12: Standard-User prüfen und zu Tenant zuordnen",
+      title: "11/13: Standard-User prüfen und zu Tenant zuordnen",
       task: async (taskCtx, task) => {
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: Standard-User würden erstellt werden`)
-          task.title = "10/12: Standard-User (DRY-RUN) ✓"
+          task.title = "11/13: Standard-User (DRY-RUN) ✓"
           return
         }
         
@@ -623,14 +661,14 @@ NEXT_PUBLIC_AUTH_BYPASS=true
             }
           }
           
-          task.title = "10/12: Standard-User erstellt ✓"
+          task.title = "11/13: Standard-User erstellt ✓"
         } catch (error) {
-          task.title = "10/12: Standard-User ⚠"
+          task.title = "11/13: Standard-User ⚠"
         }
       },
     },
     {
-      title: "11/12: Vercel Link",
+      title: "12/13: Vercel Link",
       task: async (taskCtx, task) => {
         if (!config.linkVercel) {
           task.skip("Vercel Link übersprungen")
@@ -639,7 +677,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
         
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: Vercel würde verlinkt werden`)
-          task.title = "11/12: Vercel Link (DRY-RUN) ✓"
+          task.title = "11/13: Vercel Link (DRY-RUN) ✓"
           return
         }
         
@@ -648,19 +686,19 @@ NEXT_PUBLIC_AUTH_BYPASS=true
             cwd: finalProjectPath,
             stdio: "pipe",
           })
-          task.title = "11/12: Vercel verlinkt ✓"
+          task.title = "11/13: Vercel verlinkt ✓"
         } catch (error) {
-          task.title = "11/12: Vercel Link ⚠ (nicht kritisch)"
+          task.title = "11/13: Vercel Link ⚠ (nicht kritisch)"
         }
       },
       skip: () => !config.linkVercel,
     },
     {
-      title: "12/12: MCP-Konfiguration aktualisieren",
+      title: "13/13: MCP-Konfiguration aktualisieren",
       task: async (taskCtx, task) => {
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: MCP-Konfiguration würde aktualisiert werden`)
-          task.title = "12/12: MCP-Konfiguration (DRY-RUN) ✓"
+          task.title = "12/13: MCP-Konfiguration (DRY-RUN) ✓"
           return
         }
         
@@ -691,7 +729,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
         }
         
         fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2))
-        task.title = "12/12: MCP-Konfiguration aktualisiert ✓"
+        task.title = "12/13: MCP-Konfiguration aktualisiert ✓"
       },
     },
     {
