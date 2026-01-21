@@ -419,7 +419,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
         
         const gitDir = path.join(finalProjectPath, ".git")
         if (!fs.existsSync(gitDir)) {
-          execSync("git init", { cwd: finalProjectPath, stdio: "ignore" })
+          execSync("git init -b main", { cwd: finalProjectPath, stdio: "ignore" })
         }
         
         if (ctx.repoUrl) {
