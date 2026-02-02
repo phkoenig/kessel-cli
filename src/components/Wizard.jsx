@@ -211,18 +211,41 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
       const schemaName = projectName.replace(/-/g, "_").toLowerCase()
       
       // Berechne projectPath basierend auf Installationsordner
+      // WICHTIG: Wenn aktueller Ordner bereits Projektname ist, KEINEN Unterordner erstellen!
+      const currentCwd = process.cwd()
+      const currentDirName = path.basename(currentCwd)
       let projectPath
-      if (installPath && installPath.trim()) {
+      
+      if (installPath && installPath.trim() && installPath.trim() !== '.') {
         // Wenn absoluter Pfad angegeben wurde
         if (path.isAbsolute(installPath.trim())) {
-          projectPath = path.resolve(installPath.trim(), projectName)
+          const targetPath = installPath.trim()
+          const targetDirName = path.basename(targetPath)
+          // Prüfe ob Zielordner bereits Projektname ist
+          if (targetDirName === projectName) {
+            projectPath = targetPath // KEIN zusätzlicher Unterordner!
+          } else {
+            projectPath = path.resolve(targetPath, projectName)
+          }
         } else {
           // Relativer Pfad - relativ zum aktuellen Verzeichnis
-          projectPath = path.resolve(process.cwd(), installPath.trim(), projectName)
+          const resolvedPath = path.resolve(currentCwd, installPath.trim())
+          const resolvedDirName = path.basename(resolvedPath)
+          // Prüfe ob aufgelöster Pfad bereits Projektname ist
+          if (resolvedDirName === projectName) {
+            projectPath = resolvedPath // KEIN zusätzlicher Unterordner!
+          } else {
+            projectPath = path.resolve(resolvedPath, projectName)
+          }
         }
       } else {
-        // Fallback: Aktuelles Verzeichnis + Projektname
-        projectPath = path.resolve(process.cwd(), projectName)
+        // Fallback: Aktuelles Verzeichnis
+        // Prüfe ob aktueller Ordner bereits Projektname ist
+        if (currentDirName === projectName) {
+          projectPath = currentCwd // Direkt im aktuellen Ordner, KEIN Unterordner!
+        } else {
+          projectPath = path.resolve(currentCwd, projectName)
+        }
       }
       
       // Validiere SERVICE_ROLE_KEY gegen INFRA-DB
@@ -502,26 +525,54 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   if (step === 5) {
     // Berechne Standard-Installationsordner (aktuelles Verzeichnis)
     const defaultPath = process.cwd()
+    const currentDirName = path.basename(defaultPath)
     
     // Berechne vollständigen Pfad für Anzeige
+    // WICHTIG: Wenn aktueller Ordner bereits Projektname ist, KEINEN Unterordner erstellen!
     const calculateFullPath = (inputPath) => {
-      if (!inputPath || !inputPath.trim()) {
+      // Fall 1: Kein Installationspfad angegeben (leer oder ".")
+      if (!inputPath || !inputPath.trim() || inputPath.trim() === '.') {
+        // Prüfe ob aktueller Ordner bereits Projektname ist
+        if (currentDirName === projectName) {
+          return defaultPath // Direkt im aktuellen Ordner, KEIN Unterordner!
+        }
         return path.resolve(defaultPath, projectName)
       }
+      
+      // Fall 2: Absoluter Pfad angegeben
       if (path.isAbsolute(inputPath.trim())) {
-        return path.resolve(inputPath.trim(), projectName)
+        const targetPath = inputPath.trim()
+        const targetDirName = path.basename(targetPath)
+        // Prüfe ob Zielordner bereits Projektname ist
+        if (targetDirName === projectName) {
+          return targetPath // KEIN zusätzlicher Unterordner!
+        }
+        return path.resolve(targetPath, projectName)
       }
-      return path.resolve(defaultPath, inputPath.trim(), projectName)
+      
+      // Fall 3: Relativer Pfad angegeben
+      const resolvedPath = path.resolve(defaultPath, inputPath.trim())
+      const resolvedDirName = path.basename(resolvedPath)
+      // Prüfe ob aufgelöster Pfad bereits Projektname ist
+      if (resolvedDirName === projectName) {
+        return resolvedPath // KEIN zusätzlicher Unterordner!
+      }
+      return path.resolve(resolvedPath, projectName)
     }
     
     const fullPath = calculateFullPath(installPath)
+    const willUseCurrentDir = currentDirName === projectName && (!installPath || !installPath.trim() || installPath.trim() === '.')
     
     return (
       <Box flexDirection="column">
         <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
         <Text color="cyan" bold>Installationsordner:</Text>
         <Text color="gray">Aktuelles Verzeichnis: {defaultPath}</Text>
-        <Text color="gray">Leer lassen für: {defaultPath}</Text>
+        {willUseCurrentDir ? (
+          <Text color="green">✓ Ordner "{currentDirName}" entspricht Projektname - wird direkt verwendet</Text>
+        ) : (
+          <Text color="gray">Leer lassen für: {defaultPath}</Text>
+        )}
         <TextInput
           value={installPath}
           onChange={setInstallPath}

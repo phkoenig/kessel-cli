@@ -3,7 +3,7 @@ import React5, { useState, useEffect } from 'react';
 import { render, Box, Text, useStdin, useApp } from 'ink';
 import Spinner2 from 'ink-spinner';
 import fs6 from 'fs';
-import path6 from 'path';
+import path4 from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import chalk11 from 'chalk';
@@ -159,7 +159,7 @@ function normalizeUsername(username) {
 }
 function getProfileDir() {
   const homeDir = os.homedir();
-  return path6.join(homeDir, ".kessel");
+  return path4.join(homeDir, ".kessel");
 }
 function getProfilePath(username) {
   const normalized = normalizeUsername(username);
@@ -167,7 +167,7 @@ function getProfilePath(username) {
   if (!fs6.existsSync(profileDir)) {
     fs6.mkdirSync(profileDir, { recursive: true, mode: 448 });
   }
-  return path6.join(profileDir, `${normalized}.kesselprofile`);
+  return path4.join(profileDir, `${normalized}.kesselprofile`);
 }
 function loadProfile(username) {
   if (!username || typeof username !== "string") {
@@ -213,7 +213,7 @@ __export(config_exports, {
   loadServiceRoleKey: () => loadServiceRoleKey
 });
 function loadConfig() {
-  const configPath = path6.join(__dirname$1, "..", "config.json");
+  const configPath = path4.join(__dirname$1, "..", "config.json");
   if (fs6.existsSync(configPath)) {
     try {
       const config = JSON.parse(fs6.readFileSync(configPath, "utf-8"));
@@ -263,7 +263,7 @@ var __filename$1, __dirname$1, BOILERPLATE_ENV_PATH, DEFAULTS;
 var init_config = __esm({
   "src/config.js"() {
     __filename$1 = fileURLToPath(import.meta.url);
-    __dirname$1 = path6.dirname(__filename$1);
+    __dirname$1 = path4.dirname(__filename$1);
     BOILERPLATE_ENV_PATH = "B:/Nextcloud/CODE/proj/kessel-boilerplate/.env";
     DEFAULTS = {
       infraDb: {
@@ -1148,7 +1148,7 @@ async function loadExistingProfile(projectRoot) {
       const localProfileFiles = fs6.readdirSync(projectRoot).filter((f) => f.endsWith(".kesselprofile"));
       if (localProfileFiles.length > 0) {
         const localProfilesWithStats = localProfileFiles.map((file) => {
-          const filePath = path6.join(projectRoot, file);
+          const filePath = path4.join(projectRoot, file);
           try {
             const stats = fs6.statSync(filePath);
             return { file, path: filePath, mtime: stats.mtime };
@@ -1194,7 +1194,7 @@ async function loadExistingProfile(projectRoot) {
       const profileFiles = files.filter((f) => f.endsWith(".kesselprofile"));
       if (profileFiles.length > 0) {
         const profilesWithStats = profileFiles.map((file) => {
-          const filePath = path6.join(profileDir, file);
+          const filePath = path4.join(profileDir, file);
           try {
             const stats = fs6.statSync(filePath);
             return { file, path: filePath, mtime: stats.mtime };
@@ -1333,7 +1333,7 @@ async function runInitWizard(projectNameArg = null, projectRoot = null) {
     });
     serviceRoleKey = prompt.serviceRoleKey;
   }
-  const currentDirName = projectRoot ? path6.basename(projectRoot) : "mein-projekt";
+  const currentDirName = projectRoot ? path4.basename(projectRoot) : "mein-projekt";
   const normalizedDirName = currentDirName.replace(/_/g, "-").toLowerCase();
   const defaultProjectName = projectNameArg || normalizedDirName;
   const { projectName } = await enquirer.prompt({
@@ -1530,15 +1530,33 @@ function Wizard({ projectNameArg, onComplete, onError }) {
       const infraProjectRef = cleanedInfraUrl ? new URL(cleanedInfraUrl).hostname.split(".")[0] : null;
       const devProjectRef = cleanedDevUrl ? new URL(cleanedDevUrl).hostname.split(".")[0] : null;
       const schemaName = projectName.replace(/-/g, "_").toLowerCase();
+      const currentCwd = process.cwd();
+      const currentDirName = path4.basename(currentCwd);
       let projectPath;
-      if (installPath && installPath.trim()) {
-        if (path6.isAbsolute(installPath.trim())) {
-          projectPath = path6.resolve(installPath.trim(), projectName);
+      if (installPath && installPath.trim() && installPath.trim() !== ".") {
+        if (path4.isAbsolute(installPath.trim())) {
+          const targetPath = installPath.trim();
+          const targetDirName = path4.basename(targetPath);
+          if (targetDirName === projectName) {
+            projectPath = targetPath;
+          } else {
+            projectPath = path4.resolve(targetPath, projectName);
+          }
         } else {
-          projectPath = path6.resolve(process.cwd(), installPath.trim(), projectName);
+          const resolvedPath = path4.resolve(currentCwd, installPath.trim());
+          const resolvedDirName = path4.basename(resolvedPath);
+          if (resolvedDirName === projectName) {
+            projectPath = resolvedPath;
+          } else {
+            projectPath = path4.resolve(resolvedPath, projectName);
+          }
         }
       } else {
-        projectPath = path6.resolve(process.cwd(), projectName);
+        if (currentDirName === projectName) {
+          projectPath = currentCwd;
+        } else {
+          projectPath = path4.resolve(currentCwd, projectName);
+        }
       }
       if (infraProjectRef && cleanedServiceRoleKey) {
         if (!isKeyForProject(cleanedServiceRoleKey, infraProjectRef)) {
@@ -1743,17 +1761,32 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
   }
   if (step === 5) {
     const defaultPath = process.cwd();
+    const currentDirName = path4.basename(defaultPath);
     const calculateFullPath = (inputPath) => {
-      if (!inputPath || !inputPath.trim()) {
-        return path6.resolve(defaultPath, projectName);
+      if (!inputPath || !inputPath.trim() || inputPath.trim() === ".") {
+        if (currentDirName === projectName) {
+          return defaultPath;
+        }
+        return path4.resolve(defaultPath, projectName);
       }
-      if (path6.isAbsolute(inputPath.trim())) {
-        return path6.resolve(inputPath.trim(), projectName);
+      if (path4.isAbsolute(inputPath.trim())) {
+        const targetPath = inputPath.trim();
+        const targetDirName = path4.basename(targetPath);
+        if (targetDirName === projectName) {
+          return targetPath;
+        }
+        return path4.resolve(targetPath, projectName);
       }
-      return path6.resolve(defaultPath, inputPath.trim(), projectName);
+      const resolvedPath = path4.resolve(defaultPath, inputPath.trim());
+      const resolvedDirName = path4.basename(resolvedPath);
+      if (resolvedDirName === projectName) {
+        return resolvedPath;
+      }
+      return path4.resolve(resolvedPath, projectName);
     };
     const fullPath = calculateFullPath(installPath);
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Installationsordner:"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Aktuelles Verzeichnis: ", defaultPath), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Leer lassen f\xFCr: ", defaultPath), /* @__PURE__ */ React5.createElement(
+    const willUseCurrentDir = currentDirName === projectName && (!installPath || !installPath.trim() || installPath.trim() === ".");
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Installationsordner:"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Aktuelles Verzeichnis: ", defaultPath), willUseCurrentDir ? /* @__PURE__ */ React5.createElement(Text, { color: "green" }, '\u2713 Ordner "', currentDirName, '" entspricht Projektname - wird direkt verwendet') : /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Leer lassen f\xFCr: ", defaultPath), /* @__PURE__ */ React5.createElement(
       TextInput,
       {
         value: installPath,
@@ -2402,12 +2435,12 @@ var init_phase2_setup = __esm({
   }
 });
 function initLog(projectPath, projectName) {
-  const logsDir = path6.join(projectPath, ".kessel");
+  const logsDir = path4.join(projectPath, ".kessel");
   if (!fs6.existsSync(logsDir)) {
     fs6.mkdirSync(logsDir, { recursive: true });
   }
   const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
-  logPath = path6.join(logsDir, `creation-${timestamp}.log`);
+  logPath = path4.join(logsDir, `creation-${timestamp}.log`);
   logFile = fs6.createWriteStream(logPath, { flags: "a" });
   logFile.write(`# Kessel CLI - Projekt-Erstellung Log
 `);
@@ -2598,7 +2631,7 @@ function createProjectTasks(config, ctx, projectPath, options = {}) {
           const files = fs6.readdirSync(finalProjectPath);
           if (files.length > 0) {
             debug(taskCtx, `Verzeichnis existiert bereits mit ${files.length} Dateien`);
-            if (fs6.existsSync(path6.join(finalProjectPath, "package.json"))) {
+            if (fs6.existsSync(path4.join(finalProjectPath, "package.json"))) {
               debug(taskCtx, `Bestehendes Kessel-Projekt gefunden, \xFCberspringe Klonen`);
               task.title = "2/13: Bestehendes Projekt verwendet \u2713";
               initializeLog();
@@ -2620,12 +2653,12 @@ function createProjectTasks(config, ctx, projectPath, options = {}) {
               }
             }
           );
-          const gitPath = path6.join(finalProjectPath, ".git");
+          const gitPath = path4.join(finalProjectPath, ".git");
           if (fs6.existsSync(gitPath)) {
             fs6.rmSync(gitPath, { recursive: true, force: true });
           }
           debug(taskCtx, `Template erfolgreich geklont`);
-          const pkgPath = path6.join(finalProjectPath, "package.json");
+          const pkgPath = path4.join(finalProjectPath, "package.json");
           if (fs6.existsSync(pkgPath)) {
             const pkg = JSON.parse(fs6.readFileSync(pkgPath, "utf8"));
             pkg.name = config.projectName;
@@ -2646,7 +2679,7 @@ function createProjectTasks(config, ctx, projectPath, options = {}) {
             });
             await emitter.clone(finalProjectPath);
             debug(taskCtx, `Degit erfolgreich`);
-            const pkgPath = path6.join(finalProjectPath, "package.json");
+            const pkgPath = path4.join(finalProjectPath, "package.json");
             if (fs6.existsSync(pkgPath)) {
               const pkg = JSON.parse(fs6.readFileSync(pkgPath, "utf8"));
               pkg.name = config.projectName;
@@ -2677,7 +2710,7 @@ function createProjectTasks(config, ctx, projectPath, options = {}) {
 NEXT_PUBLIC_SUPABASE_URL=${config.infraDb.url}
 SERVICE_ROLE_KEY=${config.serviceRoleKey}
 `;
-        fs6.writeFileSync(path6.join(finalProjectPath, ".env"), envContent);
+        fs6.writeFileSync(path4.join(finalProjectPath, ".env"), envContent);
         task.title = "3/13: .env erstellt \u2713";
       }
     },
@@ -2724,7 +2757,7 @@ SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
 # Auth-Bypass aktiviert den DevUserSelector auf der Login-Seite
 NEXT_PUBLIC_AUTH_BYPASS=true
 `;
-        fs6.writeFileSync(path6.join(finalProjectPath, ".env.local"), envLocalContent);
+        fs6.writeFileSync(path4.join(finalProjectPath, ".env.local"), envLocalContent);
         task.title = "4/13: .env.local erstellt \u2713";
       }
     },
@@ -2736,7 +2769,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
           task.title = "5/13: Git initialisieren (DRY-RUN) \u2713";
           return;
         }
-        const gitDir = path6.join(finalProjectPath, ".git");
+        const gitDir = path4.join(finalProjectPath, ".git");
         if (!fs6.existsSync(gitDir)) {
           execSync("git init -b main", { cwd: finalProjectPath, stdio: "ignore" });
         }
@@ -2904,7 +2937,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
           return;
         }
         debug(taskCtx, `Migration-Script suchen...`);
-        const migrationScript = path6.join(finalProjectPath, "scripts", "apply-migrations-to-schema.mjs");
+        const migrationScript = path4.join(finalProjectPath, "scripts", "apply-migrations-to-schema.mjs");
         if (!fs6.existsSync(migrationScript)) {
           debug(taskCtx, `Migration-Script nicht gefunden: ${migrationScript}`);
           task.skip("Migration-Script nicht gefunden");
@@ -2923,7 +2956,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
           task.title = "11/13: Standard-User (DRY-RUN) \u2713";
           return;
         }
-        const createUsersScript = path6.join(finalProjectPath, "scripts", "create-test-users.mjs");
+        const createUsersScript = path4.join(finalProjectPath, "scripts", "create-test-users.mjs");
         if (!fs6.existsSync(createUsersScript)) {
           task.skip("User-Script nicht gefunden");
           return;
@@ -2987,8 +3020,8 @@ NEXT_PUBLIC_AUTH_BYPASS=true
           task.title = "12/13: MCP-Konfiguration (DRY-RUN) \u2713";
           return;
         }
-        const mcpConfigPath = path6.join(finalProjectPath, ".cursor", "mcp.json");
-        const cursorDir = path6.join(finalProjectPath, ".cursor");
+        const mcpConfigPath = path4.join(finalProjectPath, ".cursor", "mcp.json");
+        const cursorDir = path4.join(finalProjectPath, ".cursor");
         if (!fs6.existsSync(cursorDir)) {
           fs6.mkdirSync(cursorDir, { recursive: true });
         }
@@ -3062,8 +3095,9 @@ function App({ projectNameArg, verbose, onComplete, onError }) {
   const [tasks, setTasks] = useState([]);
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const currentCwd = process.cwd();
-  const projectName = projectNameArg || path6.basename(currentCwd);
-  const projectPath = path6.resolve(currentCwd, projectName);
+  const currentDirName = path4.basename(currentCwd);
+  const projectName = projectNameArg || currentDirName;
+  const projectPath = currentDirName === projectName ? currentCwd : path4.resolve(currentCwd, projectName);
   const handleWizardComplete = (wizardConfig) => {
     setConfig(wizardConfig);
     setPhase("prechecks");
@@ -3166,8 +3200,8 @@ __export(init_exports, {
 async function runInitCommand(projectNameArg, options) {
   const verbose = options.verbose || false;
   const currentCwd = process.cwd();
-  const projectName = projectNameArg || path6.basename(currentCwd);
-  path6.resolve(currentCwd, projectName);
+  const projectName = projectNameArg || path4.basename(currentCwd);
+  path4.resolve(currentCwd, projectName);
   if (!process.stdin.isTTY) {
     console.error(chalk11.red.bold("\n\u274C Fehler: Diese CLI ben\xF6tigt ein interaktives Terminal."));
     console.error(chalk11.yellow("   Bitte f\xFChre die CLI in einem Terminal aus (nicht in einem Pipe oder Script).\n"));
@@ -3256,7 +3290,7 @@ function getGitHubUser() {
   }
 }
 async function runStatusCommand() {
-  const projectName = path6.basename(process.cwd());
+  const projectName = path4.basename(process.cwd());
   const config = loadConfig();
   console.log(chalk11.cyan.bold(`
   \u256D\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E
@@ -3356,8 +3390,8 @@ async function runStatusCommand() {
   }
   renderStatusTable("DATABASE", dbItems);
   const secretsItems = [];
-  const envPath = path6.join(process.cwd(), ".env");
-  const envLocalPath = path6.join(process.cwd(), ".env.local");
+  const envPath = path4.join(process.cwd(), ".env");
+  const envLocalPath = path4.join(process.cwd(), ".env.local");
   if (fs6.existsSync(envPath)) {
     const envContent = fs6.readFileSync(envPath, "utf-8");
     if (envContent.includes("SERVICE_ROLE_KEY")) {
@@ -3404,7 +3438,7 @@ async function runStatusCommand() {
   }
   renderStatusTable("SECRETS", secretsItems);
   const mcpItems = [];
-  const mcpConfigPath = path6.join(process.cwd(), ".cursor", "mcp.json");
+  const mcpConfigPath = path4.join(process.cwd(), ".cursor", "mcp.json");
   if (fs6.existsSync(mcpConfigPath)) {
     try {
       const mcpConfig = JSON.parse(fs6.readFileSync(mcpConfigPath, "utf-8"));
@@ -3834,10 +3868,10 @@ var init_secrets = __esm({
   }
 });
 var __filename2 = fileURLToPath(import.meta.url);
-var __dirname2 = path6.dirname(__filename2);
+var __dirname2 = path4.dirname(__filename2);
 function getBoilerplateVersion() {
   try {
-    const boilerplatePath = path6.resolve(__dirname2, "..", "kessel-boilerplate", "boilerplate.json");
+    const boilerplatePath = path4.resolve(__dirname2, "..", "kessel-boilerplate", "boilerplate.json");
     if (fs6.existsSync(boilerplatePath)) {
       const data = JSON.parse(fs6.readFileSync(boilerplatePath, "utf-8"));
       return data.version || "unknown";

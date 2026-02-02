@@ -21,9 +21,14 @@ export function App({ projectNameArg, verbose, onComplete, onError }) {
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0)
   
   // Berechne projectPath basierend auf projectNameArg
+  // WICHTIG: Wenn aktueller Ordner bereits Projektname ist, KEINEN Unterordner erstellen!
   const currentCwd = process.cwd()
-  const projectName = projectNameArg || path.basename(currentCwd)
-  const projectPath = path.resolve(currentCwd, projectName)
+  const currentDirName = path.basename(currentCwd)
+  const projectName = projectNameArg || currentDirName
+  // Prüfe ob aktueller Ordner bereits Projektname ist
+  const projectPath = (currentDirName === projectName) 
+    ? currentCwd  // Direkt im aktuellen Ordner, KEIN Unterordner!
+    : path.resolve(currentCwd, projectName)
 
   // Phase 0: Wizard
   const handleWizardComplete = (wizardConfig) => {
