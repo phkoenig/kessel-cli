@@ -4,11 +4,11 @@ import { render, Box, Text, useStdin, useApp } from 'ink';
 import Spinner2 from 'ink-spinner';
 import fs6 from 'fs';
 import path4 from 'path';
-import os from 'os';
 import { fileURLToPath } from 'url';
 import chalk11 from 'chalk';
 import { execSync, spawn } from 'child_process';
 import pg from 'pg';
+import os from 'os';
 import enquirer from 'enquirer';
 import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
@@ -149,58 +149,6 @@ function WizardProgress({ currentStep, totalSteps, stepTitle }) {
 }
 var init_WizardProgress = __esm({
   "src/components/WizardProgress.jsx"() {
-  }
-});
-function normalizeUsername(username) {
-  if (!username || typeof username !== "string") {
-    throw new Error("Username muss ein nicht-leerer String sein");
-  }
-  return username.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss").replace(/[^a-z0-9]/g, "");
-}
-function getProfileDir() {
-  const homeDir = os.homedir();
-  return path4.join(homeDir, ".kessel");
-}
-function getProfilePath(username) {
-  const normalized = normalizeUsername(username);
-  const profileDir = getProfileDir();
-  if (!fs6.existsSync(profileDir)) {
-    fs6.mkdirSync(profileDir, { recursive: true, mode: 448 });
-  }
-  return path4.join(profileDir, `${normalized}.kesselprofile`);
-}
-function loadProfile(username) {
-  if (!username || typeof username !== "string") {
-    return null;
-  }
-  try {
-    const profilePath = getProfilePath(username);
-    if (!fs6.existsSync(profilePath)) {
-      return null;
-    }
-    const content = fs6.readFileSync(profilePath, "utf-8");
-    const profile = {};
-    const lines = content.split("\n");
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) {
-        continue;
-      }
-      const match = trimmed.match(/^([^=]+)=(.*)$/);
-      if (match) {
-        const key = match[1].trim();
-        const value = match[2].trim();
-        const unquotedValue = value.replace(/^["']|["']$/g, "");
-        profile[key] = unquotedValue;
-      }
-    }
-    return Object.keys(profile).length > 0 ? profile : null;
-  } catch (error) {
-    return null;
-  }
-}
-var init_profile = __esm({
-  "lib/profile.js"() {
   }
 });
 
@@ -1135,6 +1083,58 @@ var init_supabase = __esm({
     ({ Client } = pg);
   }
 });
+function normalizeUsername(username) {
+  if (!username || typeof username !== "string") {
+    throw new Error("Username muss ein nicht-leerer String sein");
+  }
+  return username.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss").replace(/[^a-z0-9]/g, "");
+}
+function getProfileDir() {
+  const homeDir = os.homedir();
+  return path4.join(homeDir, ".kessel");
+}
+function getProfilePath(username) {
+  const normalized = normalizeUsername(username);
+  const profileDir = getProfileDir();
+  if (!fs6.existsSync(profileDir)) {
+    fs6.mkdirSync(profileDir, { recursive: true, mode: 448 });
+  }
+  return path4.join(profileDir, `${normalized}.kesselprofile`);
+}
+function loadProfile(username) {
+  if (!username || typeof username !== "string") {
+    return null;
+  }
+  try {
+    const profilePath = getProfilePath(username);
+    if (!fs6.existsSync(profilePath)) {
+      return null;
+    }
+    const content = fs6.readFileSync(profilePath, "utf-8");
+    const profile = {};
+    const lines = content.split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue;
+      }
+      const match = trimmed.match(/^([^=]+)=(.*)$/);
+      if (match) {
+        const key = match[1].trim();
+        const value = match[2].trim();
+        const unquotedValue = value.replace(/^["']|["']$/g, "");
+        profile[key] = unquotedValue;
+      }
+    }
+    return Object.keys(profile).length > 0 ? profile : null;
+  } catch (error) {
+    return null;
+  }
+}
+var init_profile = __esm({
+  "lib/profile.js"() {
+  }
+});
 
 // src/wizard/initWizard.js
 var initWizard_exports = {};
@@ -1434,14 +1434,80 @@ function isKeyForProject(serviceRoleKey, expectedProjectRef) {
   const keyProjectRef = extractProjectRefFromJwt(serviceRoleKey);
   return keyProjectRef === expectedProjectRef;
 }
+async function findAllProfiles() {
+  const profiles = [];
+  try {
+    const cwd = process.cwd();
+    const localFiles = fs6.readdirSync(cwd).filter((f) => f.endsWith(".kesselprofile"));
+    for (const file of localFiles) {
+      const filePath = path4.join(cwd, file);
+      try {
+        const stats = fs6.statSync(filePath);
+        const content = fs6.readFileSync(filePath, "utf-8");
+        const profile = parseProfileContent(content);
+        const username = file.replace(".kesselprofile", "");
+        profiles.push({
+          username,
+          profile,
+          source: "local",
+          path: filePath,
+          mtime: stats.mtime
+        });
+      } catch {
+      }
+    }
+    const os2 = await import('os');
+    const profileDir = path4.join(os2.default.homedir(), ".kessel");
+    if (fs6.existsSync(profileDir)) {
+      const systemFiles = fs6.readdirSync(profileDir).filter((f) => f.endsWith(".kesselprofile"));
+      for (const file of systemFiles) {
+        const filePath = path4.join(profileDir, file);
+        const username = file.replace(".kesselprofile", "");
+        if (profiles.some((p) => p.username === username)) continue;
+        try {
+          const stats = fs6.statSync(filePath);
+          const content = fs6.readFileSync(filePath, "utf-8");
+          const profile = parseProfileContent(content);
+          profiles.push({
+            username,
+            profile,
+            source: "system",
+            path: filePath,
+            mtime: stats.mtime
+          });
+        } catch {
+        }
+      }
+    }
+  } catch {
+  }
+  profiles.sort((a, b) => b.mtime - a.mtime);
+  return profiles;
+}
+function parseProfileContent(content) {
+  const profile = {};
+  const lines = content.split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const match = trimmed.match(/^([^=]+)=(.*)$/);
+    if (match) {
+      const key = match[1].trim();
+      const value = match[2].trim().replace(/^["']|["']$/g, "");
+      profile[key] = value;
+    }
+  }
+  return profile;
+}
 function Wizard({ projectNameArg, onComplete, onError }) {
   const { isRawModeSupported } = useStdin();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(-1);
   const [config, setConfig] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadingMessage, setLoadingMessage] = useState("Lade Profile...");
+  const [availableProfiles, setAvailableProfiles] = useState([]);
+  const [selectedProfile, setSelectedProfile] = useState(null);
   const [username, setUsername] = useState("");
-  const [usernameSubmitted, setUsernameSubmitted] = useState(false);
   const [infraUrl, setInfraUrl] = useState("");
   const [infraUrlSubmitted, setInfraUrlSubmitted] = useState(false);
   const [devUrl, setDevUrl] = useState("");
@@ -1465,33 +1531,46 @@ function Wizard({ projectNameArg, onComplete, onError }) {
   const [fetchingDbPassword, setFetchingDbPassword] = useState(false);
   const [dbPasswordFromVault, setDbPasswordFromVault] = useState(false);
   const [startDevServer, setStartDevServer] = useState(null);
+  const applyProfile = async (profile, profileUsername) => {
+    const { DEFAULTS: DEFAULTS2 } = await Promise.resolve().then(() => (init_config(), config_exports));
+    setUsername(profileUsername || profile?.USERNAME || "");
+    const backendUrl = profile?.SUPABASE_BACKEND_URL;
+    const isValidInfraDb = backendUrl?.includes(DEFAULTS2.infraDb.projectRef);
+    const infraUrlDefault = profile?.SUPABASE_INFRA_URL || (isValidInfraDb ? backendUrl : null) || DEFAULTS2.infraDb.url;
+    setInfraUrl(infraUrlDefault);
+    setDevUrl(profile?.SUPABASE_DEV_URL || DEFAULTS2.devDb.url);
+  };
   useEffect(() => {
-    const loadProfile2 = async () => {
+    const initProfiles = async () => {
       try {
-        const { loadExistingProfile: loadExistingProfile2 } = await Promise.resolve().then(() => (init_initWizard(), initWizard_exports));
+        const profiles = await findAllProfiles();
+        setAvailableProfiles(profiles);
         const { DEFAULTS: DEFAULTS2 } = await Promise.resolve().then(() => (init_config(), config_exports));
-        const existing = await loadExistingProfile2(process.cwd());
-        if (existing?.profile) {
-          const profile = existing.profile;
-          setUsername(profile.USERNAME || existing.username || "");
-          const backendUrl = profile.SUPABASE_BACKEND_URL;
-          const isValidInfraDb = backendUrl?.includes(DEFAULTS2.infraDb.projectRef);
-          const infraUrlDefault = profile.SUPABASE_INFRA_URL || (isValidInfraDb ? backendUrl : null) || DEFAULTS2.infraDb.url;
-          setInfraUrl(infraUrlDefault);
-          setDevUrl(profile.SUPABASE_DEV_URL || DEFAULTS2.devDb.url);
-        } else {
-          const { DEFAULTS: DEFAULTS3 } = await Promise.resolve().then(() => (init_config(), config_exports));
-          setInfraUrl(DEFAULTS3.infraDb.url);
-          setDevUrl(DEFAULTS3.devDb.url);
-        }
-      } catch (error) {
-        Promise.resolve().then(() => (init_config(), config_exports)).then(({ DEFAULTS: DEFAULTS2 }) => {
+        if (profiles.length === 0) {
           setInfraUrl(DEFAULTS2.infraDb.url);
           setDevUrl(DEFAULTS2.devDb.url);
-        });
+          setStep(1);
+        } else if (profiles.length === 1) {
+          const { profile, username: profileUsername } = profiles[0];
+          await applyProfile(profile, profileUsername);
+          setSelectedProfile(profiles[0]);
+          setStep(1);
+        } else {
+          const { profile, username: profileUsername } = profiles[0];
+          await applyProfile(profile, profileUsername);
+          setSelectedProfile(profiles[0]);
+          setStep(0);
+        }
+      } catch (error) {
+        const { DEFAULTS: DEFAULTS2 } = await Promise.resolve().then(() => (init_config(), config_exports));
+        setInfraUrl(DEFAULTS2.infraDb.url);
+        setDevUrl(DEFAULTS2.devDb.url);
+        setStep(1);
+      } finally {
+        setLoading(false);
       }
     };
-    loadProfile2();
+    initProfiles();
   }, []);
   useEffect(() => {
     if (step === 6 && !dbPasswordSubmitted && !fetchingDbPassword && infraUrl && serviceRoleKey) {
@@ -1606,6 +1685,10 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
       setLoading(false);
     }
   };
+  const profileStepWasShown = availableProfiles.length > 1;
+  const effectiveTotalSteps = profileStepWasShown ? TOTAL_STEPS : TOTAL_STEPS - 1;
+  const effectiveCurrentStep = profileStepWasShown ? step : Math.max(0, step - 1);
+  const effectiveStepTitle = profileStepWasShown ? STEP_TITLES[step] : STEP_TITLES[step] || STEP_TITLES[1];
   if (!isRawModeSupported) {
     return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(Text, { color: "red", bold: true }, "\u274C Fehler: Raw mode wird nicht unterst\xFCtzt"), /* @__PURE__ */ React5.createElement(Text, { color: "yellow" }, "   Diese CLI ben\xF6tigt ein interaktives Terminal."), /* @__PURE__ */ React5.createElement(Text, { color: "yellow" }, "   Bitte f\xFChre die CLI in einem Terminal aus (nicht in einem Pipe oder Script)."));
   }
@@ -1613,22 +1696,27 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
     return /* @__PURE__ */ React5.createElement(Box, null, /* @__PURE__ */ React5.createElement(Spinner2, { type: "dots" }), /* @__PURE__ */ React5.createElement(Text, null, " ", loadingMessage));
   }
   if (step === 0) {
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Dein Username:"), /* @__PURE__ */ React5.createElement(
-      TextInput,
+    const profileOptions = availableProfiles.map((p) => ({
+      label: `${p.username} (${p.source === "local" ? "lokal" : "~/.kessel"})`,
+      value: p.username
+    }));
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Mehrere Profile gefunden - welches verwenden?"), /* @__PURE__ */ React5.createElement(Text, { color: "gray", dimColor: true }, "Die Auswahl f\xFCllt INFRA-DB, DEV-DB und andere Felder vor."), /* @__PURE__ */ React5.createElement(Box, { marginTop: 1 }, /* @__PURE__ */ React5.createElement(
+      SelectInput,
       {
-        value: username,
-        onChange: setUsername,
-        onSubmit: (value) => {
-          if (value.trim()) {
-            setUsernameSubmitted(true);
-            setStep(1);
+        items: profileOptions,
+        onSelect: async (item) => {
+          const selected = availableProfiles.find((p) => p.username === item.value);
+          if (selected) {
+            setSelectedProfile(selected);
+            await applyProfile(selected.profile, selected.username);
           }
+          setStep(1);
         }
       }
-    ));
+    )), /* @__PURE__ */ React5.createElement(Text, { color: "gray", marginTop: 1 }, "Aktuell vorausgew\xE4hlt: ", selectedProfile?.username || "keins"));
   }
   if (step === 1) {
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "INFRA-DB URL (Kessel - Auth, Vault, Multi-Tenant):"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "INFRA-DB URL (Kessel - Auth, Vault, Multi-Tenant):"), /* @__PURE__ */ React5.createElement(
       TextInput,
       {
         value: infraUrl,
@@ -1647,7 +1735,7 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
     ));
   }
   if (step === 2) {
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DEV-DB URL (App-Daten, Entwicklung):"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DEV-DB URL (App-Daten, Entwicklung):"), /* @__PURE__ */ React5.createElement(
       TextInput,
       {
         value: devUrl,
@@ -1725,7 +1813,7 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
   if (step === 3) {
     const cleanedInfraUrlForValidation = cleanUrl(infraUrl);
     const infraProjectRefForValidation = cleanedInfraUrlForValidation ? new URL(cleanedInfraUrlForValidation).hostname.split(".")[0] : null;
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "SERVICE_ROLE_KEY (f\xFCr INFRA-DB: ", infraProjectRefForValidation, "):"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Der Key muss zur INFRA-DB passen, nicht zur DEV-DB!"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "SERVICE_ROLE_KEY (f\xFCr INFRA-DB: ", infraProjectRefForValidation, "):"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Der Key muss zur INFRA-DB passen, nicht zur DEV-DB!"), /* @__PURE__ */ React5.createElement(
       TextInput,
       {
         value: serviceRoleKey,
@@ -1745,7 +1833,7 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
     ), serviceRoleKeyStatus && /* @__PURE__ */ React5.createElement(Text, { color: "yellow" }, serviceRoleKeyStatus));
   }
   if (step === 4) {
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Projektname:"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Projektname:"), /* @__PURE__ */ React5.createElement(
       TextInput,
       {
         value: projectName,
@@ -1786,7 +1874,7 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
     };
     const fullPath = calculateFullPath(installPath);
     const willUseCurrentDir = currentDirName === projectName && (!installPath || !installPath.trim() || installPath.trim() === ".");
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Installationsordner:"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Aktuelles Verzeichnis: ", defaultPath), willUseCurrentDir ? /* @__PURE__ */ React5.createElement(Text, { color: "green" }, '\u2713 Ordner "', currentDirName, '" entspricht Projektname - wird direkt verwendet') : /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Leer lassen f\xFCr: ", defaultPath), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Installationsordner:"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Aktuelles Verzeichnis: ", defaultPath), willUseCurrentDir ? /* @__PURE__ */ React5.createElement(Text, { color: "green" }, '\u2713 Ordner "', currentDirName, '" entspricht Projektname - wird direkt verwendet') : /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Leer lassen f\xFCr: ", defaultPath), /* @__PURE__ */ React5.createElement(
       TextInput,
       {
         value: installPath,
@@ -1800,16 +1888,16 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
   }
   if (step === 6) {
     if (fetchingDbPassword) {
-      return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DB-Passwort (optional):"), /* @__PURE__ */ React5.createElement(Box, null, /* @__PURE__ */ React5.createElement(Text, { color: "yellow" }, /* @__PURE__ */ React5.createElement(Spinner2, { type: "dots" })), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, " Suche Passwort im Vault...")));
+      return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DB-Passwort (optional):"), /* @__PURE__ */ React5.createElement(Box, null, /* @__PURE__ */ React5.createElement(Text, { color: "yellow" }, /* @__PURE__ */ React5.createElement(Spinner2, { type: "dots" })), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, " Suche Passwort im Vault...")));
     }
     if (dbPasswordFromVault && dbPassword && !dbPasswordSubmitted) {
       setTimeout(() => {
         setDbPasswordSubmitted(true);
         setStep(7);
       }, 500);
-      return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DB-Passwort (optional):"), /* @__PURE__ */ React5.createElement(Text, { color: "green" }, "\u2713 Aus Vault geladen (SUPABASE_DB_PASSWORD)"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Passwort: ", dbPassword.substring(0, 4), "*".repeat(Math.max(0, dbPassword.length - 4))), /* @__PURE__ */ React5.createElement(Text, { color: "green", marginTop: 1 }, "\u2192 Wird automatisch \xFCbernommen..."));
+      return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DB-Passwort (optional):"), /* @__PURE__ */ React5.createElement(Text, { color: "green" }, "\u2713 Aus Vault geladen (SUPABASE_DB_PASSWORD)"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Passwort: ", dbPassword.substring(0, 4), "*".repeat(Math.max(0, dbPassword.length - 4))), /* @__PURE__ */ React5.createElement(Text, { color: "green", marginTop: 1 }, "\u2192 Wird automatisch \xFCbernommen..."));
     }
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DB-Passwort (optional):"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "F\xFCr automatische Schema-Konfiguration (PostgREST)"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Leer lassen = sp\xE4ter manuell via Migration"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DB-Passwort (optional):"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "F\xFCr automatische Schema-Konfiguration (PostgREST)"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Leer lassen = sp\xE4ter manuell via Migration"), /* @__PURE__ */ React5.createElement(
       TextInput,
       {
         value: dbPassword,
@@ -1830,7 +1918,7 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
       { label: "Ja, \xF6ffentlich", value: "public" },
       { label: "Nein, nur lokal", value: "none" }
     ];
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "GitHub Repository erstellen?"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "GitHub Repository erstellen?"), /* @__PURE__ */ React5.createElement(
       SelectInput,
       {
         items: githubOptions,
@@ -1846,7 +1934,7 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
       { label: "Ja", value: true },
       { label: "Nein", value: false }
     ];
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Dependencies automatisch installieren?"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Dependencies automatisch installieren?"), /* @__PURE__ */ React5.createElement(
       SelectInput,
       {
         items: yesNoOptions,
@@ -1863,7 +1951,7 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
       { label: "Ja", value: true },
       { label: "Nein", value: false }
     ];
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Mit Vercel verkn\xFCpfen?"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Mit Vercel verkn\xFCpfen?"), /* @__PURE__ */ React5.createElement(
       SelectInput,
       {
         items: yesNoOptions,
@@ -1880,7 +1968,7 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
       { label: "Ja", value: true },
       { label: "Nein", value: false }
     ];
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Initial Commit erstellen?"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Initial Commit erstellen?"), /* @__PURE__ */ React5.createElement(
       SelectInput,
       {
         items: yesNoOptions,
@@ -1898,7 +1986,7 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
       { label: "Nein", value: false }
     ];
     const defaultIndex = createGithub !== "none" && doInitialCommit ? 0 : 1;
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "\xC4nderungen zu GitHub pushen?"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "\xC4nderungen zu GitHub pushen?"), /* @__PURE__ */ React5.createElement(
       SelectInput,
       {
         items: yesNoOptions,
@@ -1915,7 +2003,7 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
       { label: "Ja, Dev-Server starten", value: true },
       { label: "Nein, nur Projekt erstellen", value: false }
     ];
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: step, totalSteps: TOTAL_STEPS, stepTitle: STEP_TITLES[step] }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Dev-Server nach Erstellung starten?"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Startet `pnpm dev` im Projekt-Verzeichnis"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "Dev-Server nach Erstellung starten?"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Startet `pnpm dev` im Projekt-Verzeichnis"), /* @__PURE__ */ React5.createElement(
       SelectInput,
       {
         items: yesNoOptions,
@@ -1934,7 +2022,7 @@ var init_Wizard = __esm({
   "src/components/Wizard.jsx"() {
     init_WizardProgress();
     STEP_TITLES = [
-      "Username eingeben",
+      "Profil ausw\xE4hlen",
       "INFRA-DB URL eingeben",
       "DEV-DB URL eingeben",
       "SERVICE_ROLE_KEY eingeben",

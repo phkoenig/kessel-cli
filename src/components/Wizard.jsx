@@ -47,10 +47,94 @@ function isKeyForProject(serviceRoleKey, expectedProjectRef) {
 }
 
 /**
+ * Findet alle verfügbaren Profile im System
+ * @returns {Promise<Array>} Array von {username, profile, source, path}
+ */
+async function findAllProfiles() {
+  const profiles = []
+  
+  try {
+    // 1. Suche lokale Profile im aktuellen Verzeichnis
+    const cwd = process.cwd()
+    const localFiles = fs.readdirSync(cwd).filter(f => f.endsWith('.kesselprofile'))
+    
+    for (const file of localFiles) {
+      const filePath = path.join(cwd, file)
+      try {
+        const stats = fs.statSync(filePath)
+        const content = fs.readFileSync(filePath, 'utf-8')
+        const profile = parseProfileContent(content)
+        const username = file.replace('.kesselprofile', '')
+        profiles.push({
+          username,
+          profile,
+          source: 'local',
+          path: filePath,
+          mtime: stats.mtime,
+        })
+      } catch { /* ignore */ }
+    }
+    
+    // 2. Suche systemweite Profile in ~/.kessel/
+    const os = await import('os')
+    const profileDir = path.join(os.default.homedir(), '.kessel')
+    
+    if (fs.existsSync(profileDir)) {
+      const systemFiles = fs.readdirSync(profileDir).filter(f => f.endsWith('.kesselprofile'))
+      
+      for (const file of systemFiles) {
+        const filePath = path.join(profileDir, file)
+        const username = file.replace('.kesselprofile', '')
+        
+        // Überspringe wenn bereits als lokales Profil gefunden
+        if (profiles.some(p => p.username === username)) continue
+        
+        try {
+          const stats = fs.statSync(filePath)
+          const content = fs.readFileSync(filePath, 'utf-8')
+          const profile = parseProfileContent(content)
+          profiles.push({
+            username,
+            profile,
+            source: 'system',
+            path: filePath,
+            mtime: stats.mtime,
+          })
+        } catch { /* ignore */ }
+      }
+    }
+  } catch { /* ignore */ }
+  
+  // Sortiere nach Änderungsdatum (neueste zuerst)
+  profiles.sort((a, b) => b.mtime - a.mtime)
+  return profiles
+}
+
+/**
+ * Parsed Profil-Inhalt im .env-Format
+ */
+function parseProfileContent(content) {
+  const profile = {}
+  const lines = content.split('\n')
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const match = trimmed.match(/^([^=]+)=(.*)$/)
+    if (match) {
+      const key = match[1].trim()
+      const value = match[2].trim().replace(/^["']|["']$/g, '')
+      profile[key] = value
+    }
+  }
+  return profile
+}
+
+/**
  * Schritt-Titel für Wizard-Progress
+ * Step 0 ist jetzt nur "Profil auswählen" (nur bei mehreren Profilen sichtbar)
  */
 const STEP_TITLES = [
-  'Username eingeben',
+  'Profil auswählen',
   'INFRA-DB URL eingeben',
   'DEV-DB URL eingeben',
   'SERVICE_ROLE_KEY eingeben',
@@ -72,97 +156,118 @@ const TOTAL_STEPS = 13
  */
 export function Wizard({ projectNameArg, onComplete, onError }) {
   const { isRawModeSupported } = useStdin()
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(-1) // -1 = Loading, 0 = Profile-Auswahl (nur bei mehreren), 1+ = restliche Steps
   const [config, setConfig] = useState({})
-  const [loading, setLoading] = useState(false)
-  const [loadingMessage, setLoadingMessage] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [loadingMessage, setLoadingMessage] = useState('Lade Profile...')
 
-  // Schritt 1: Username
+  // Profil-System
+  const [availableProfiles, setAvailableProfiles] = useState([])
+  const [selectedProfile, setSelectedProfile] = useState(null)
   const [username, setUsername] = useState('')
-  const [usernameSubmitted, setUsernameSubmitted] = useState(false)
 
-  // Schritt 2: INFRA-DB URL
+  // INFRA-DB URL
   const [infraUrl, setInfraUrl] = useState('')
   const [infraUrlSubmitted, setInfraUrlSubmitted] = useState(false)
 
-  // Schritt 3: DEV-DB URL
+  // DEV-DB URL
   const [devUrl, setDevUrl] = useState('')
   const [devUrlSubmitted, setDevUrlSubmitted] = useState(false)
 
-  // Schritt 4: SERVICE_ROLE_KEY
+  // SERVICE_ROLE_KEY
   const [serviceRoleKey, setServiceRoleKey] = useState('')
   const [serviceRoleKeySubmitted, setServiceRoleKeySubmitted] = useState(false)
   const [fetchingServiceRoleKey, setFetchingServiceRoleKey] = useState(false)
   const [serviceRoleKeyStatus, setServiceRoleKeyStatus] = useState('')
 
-  // Schritt 5: Projektname
+  // Projektname
   const [projectName, setProjectName] = useState(projectNameArg || '')
   const [projectNameSubmitted, setProjectNameSubmitted] = useState(false)
 
-  // Schritt 6: Installationsordner
+  // Installationsordner
   const [installPath, setInstallPath] = useState('')
   const [installPathSubmitted, setInstallPathSubmitted] = useState(false)
 
-  // Schritt 7: GitHub Repo
+  // GitHub Repo
   const [createGithub, setCreateGithub] = useState(null)
 
-  // Schritt 8: Auto Install
+  // Auto Install
   const [autoInstallDeps, setAutoInstallDeps] = useState(null)
 
-  // Schritt 9: Vercel Link
+  // Vercel Link
   const [linkVercel, setLinkVercel] = useState(null)
 
-  // Schritt 10: Initial Commit
+  // Initial Commit
   const [doInitialCommit, setDoInitialCommit] = useState(null)
 
-  // Schritt 11: Push
+  // Push
   const [doPush, setDoPush] = useState(null)
 
-  // Schritt 6: DB-Passwort (optional, für automatische Schema-Konfiguration)
+  // DB-Passwort (optional)
   const [dbPassword, setDbPassword] = useState('')
   const [dbPasswordSubmitted, setDbPasswordSubmitted] = useState(false)
   const [skipDbPassword, setSkipDbPassword] = useState(false)
   const [fetchingDbPassword, setFetchingDbPassword] = useState(false)
   const [dbPasswordFromVault, setDbPasswordFromVault] = useState(false)
 
-  // Schritt 13: Dev-Server starten
+  // Dev-Server starten
   const [startDevServer, setStartDevServer] = useState(null)
 
+  // Hilfsfunktion: Profil auf State anwenden
+  const applyProfile = async (profile, profileUsername) => {
+    const { DEFAULTS } = await import('../config.js')
+    
+    setUsername(profileUsername || profile?.USERNAME || '')
+    
+    // INFRA-DB: Verwende SUPABASE_INFRA_URL oder SUPABASE_BACKEND_URL (nur wenn es Kessel ist)
+    const backendUrl = profile?.SUPABASE_BACKEND_URL
+    const isValidInfraDb = backendUrl?.includes(DEFAULTS.infraDb.projectRef)
+    const infraUrlDefault = profile?.SUPABASE_INFRA_URL || (isValidInfraDb ? backendUrl : null) || DEFAULTS.infraDb.url
+    setInfraUrl(infraUrlDefault)
+    
+    setDevUrl(profile?.SUPABASE_DEV_URL || DEFAULTS.devDb.url)
+  }
+
   useEffect(() => {
-    // Lade existierendes Profil beim Start
-    const loadProfile = async () => {
+    // Lade alle verfügbaren Profile beim Start
+    const initProfiles = async () => {
       try {
-        const { loadExistingProfile } = await import('../wizard/initWizard.js')
-        const { DEFAULTS } = await import('../config.js')
-        const existing = await loadExistingProfile(process.cwd())
+        const profiles = await findAllProfiles()
+        setAvailableProfiles(profiles)
         
-        if (existing?.profile) {
-          const profile = existing.profile
-          setUsername(profile.USERNAME || existing.username || '')
-          
-          // INFRA-DB: Verwende SUPABASE_INFRA_URL oder SUPABASE_BACKEND_URL (nur wenn es Kessel ist)
-          const backendUrl = profile.SUPABASE_BACKEND_URL
-          const isValidInfraDb = backendUrl?.includes(DEFAULTS.infraDb.projectRef)
-          const infraUrlDefault = profile.SUPABASE_INFRA_URL || (isValidInfraDb ? backendUrl : null) || DEFAULTS.infraDb.url
-          setInfraUrl(infraUrlDefault)
-          
-          setDevUrl(profile.SUPABASE_DEV_URL || DEFAULTS.devDb.url)
-        } else {
-          // Setze Defaults wenn kein Profil gefunden
-          const { DEFAULTS } = await import('../config.js')
+        const { DEFAULTS } = await import('../config.js')
+        
+        if (profiles.length === 0) {
+          // Keine Profile gefunden - nur Defaults setzen, direkt zu Step 1
           setInfraUrl(DEFAULTS.infraDb.url)
           setDevUrl(DEFAULTS.devDb.url)
+          setStep(1) // Überspringe Profil-Auswahl
+        } else if (profiles.length === 1) {
+          // Genau ein Profil - automatisch laden, direkt zu Step 1
+          const { profile, username: profileUsername } = profiles[0]
+          await applyProfile(profile, profileUsername)
+          setSelectedProfile(profiles[0])
+          setStep(1) // Überspringe Profil-Auswahl
+        } else {
+          // Mehrere Profile - Auswahl anzeigen (Step 0)
+          // Lade erstmal das neueste als Default
+          const { profile, username: profileUsername } = profiles[0]
+          await applyProfile(profile, profileUsername)
+          setSelectedProfile(profiles[0])
+          setStep(0) // Zeige Profil-Auswahl
         }
       } catch (error) {
-        // Setze Defaults bei Fehler
-        import('../config.js').then(({ DEFAULTS }) => {
-          setInfraUrl(DEFAULTS.infraDb.url)
-          setDevUrl(DEFAULTS.devDb.url)
-        })
+        // Bei Fehler: Defaults setzen und zu Step 1
+        const { DEFAULTS } = await import('../config.js')
+        setInfraUrl(DEFAULTS.infraDb.url)
+        setDevUrl(DEFAULTS.devDb.url)
+        setStep(1)
+      } finally {
+        setLoading(false)
       }
     }
 
-    loadProfile()
+    initProfiles()
   }, [])
 
   // Versuche DB-Passwort aus Vault zu laden wenn Step 6 erreicht wird
@@ -301,6 +406,13 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     }
   }
 
+  // Berechne effektive Schrittnummer für Anzeige
+  // Wenn Profil-Auswahl übersprungen wurde (0 oder 1 Profile), zeige "1/12" statt "2/13"
+  const profileStepWasShown = availableProfiles.length > 1
+  const effectiveTotalSteps = profileStepWasShown ? TOTAL_STEPS : TOTAL_STEPS - 1
+  const effectiveCurrentStep = profileStepWasShown ? step : Math.max(0, step - 1)
+  const effectiveStepTitle = profileStepWasShown ? STEP_TITLES[step] : STEP_TITLES[step] || STEP_TITLES[1]
+
   // Render-Schritte
   if (!isRawModeSupported) {
     return (
@@ -322,20 +434,33 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   }
 
   if (step === 0) {
+    // Profil-Auswahl - nur wenn mehrere Profile existieren
+    const profileOptions = availableProfiles.map(p => ({
+      label: `${p.username} (${p.source === 'local' ? 'lokal' : '~/.kessel'})`,
+      value: p.username,
+    }))
+    
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
-        <Text color="cyan" bold>Dein Username:</Text>
-        <TextInput
-          value={username}
-          onChange={setUsername}
-          onSubmit={(value) => {
-            if (value.trim()) {
-              setUsernameSubmitted(true)
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
+        <Text color="cyan" bold>Mehrere Profile gefunden - welches verwenden?</Text>
+        <Text color="gray" dimColor>Die Auswahl füllt INFRA-DB, DEV-DB und andere Felder vor.</Text>
+        <Box marginTop={1}>
+          <SelectInput
+            items={profileOptions}
+            onSelect={async (item) => {
+              const selected = availableProfiles.find(p => p.username === item.value)
+              if (selected) {
+                setSelectedProfile(selected)
+                await applyProfile(selected.profile, selected.username)
+              }
               setStep(1)
-            }
-          }}
-        />
+            }}
+          />
+        </Box>
+        <Text color="gray" marginTop={1}>
+          Aktuell vorausgewählt: {selectedProfile?.username || 'keins'}
+        </Text>
       </Box>
     )
   }
@@ -343,7 +468,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   if (step === 1) {
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>INFRA-DB URL (Kessel - Auth, Vault, Multi-Tenant):</Text>
         <TextInput
           value={infraUrl}
@@ -367,7 +492,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   if (step === 2) {
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>DEV-DB URL (App-Daten, Entwicklung):</Text>
         <TextInput
           value={devUrl}
@@ -478,7 +603,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>SERVICE_ROLE_KEY (für INFRA-DB: {infraProjectRefForValidation}):</Text>
         <Text color="gray">Der Key muss zur INFRA-DB passen, nicht zur DEV-DB!</Text>
         <TextInput
@@ -506,7 +631,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   if (step === 4) {
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>Projektname:</Text>
         <TextInput
           value={projectName}
@@ -565,7 +690,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>Installationsordner:</Text>
         <Text color="gray">Aktuelles Verzeichnis: {defaultPath}</Text>
         {willUseCurrentDir ? (
@@ -595,7 +720,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     if (fetchingDbPassword) {
       return (
         <Box flexDirection="column">
-          <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+          <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
           <Text color="cyan" bold>DB-Passwort (optional):</Text>
           <Box>
             <Text color="yellow"><Spinner type="dots" /></Text>
@@ -615,7 +740,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
       
       return (
         <Box flexDirection="column">
-          <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+          <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
           <Text color="cyan" bold>DB-Passwort (optional):</Text>
           <Text color="green">✓ Aus Vault geladen (SUPABASE_DB_PASSWORD)</Text>
           <Text color="gray">Passwort: {dbPassword.substring(0, 4)}{'*'.repeat(Math.max(0, dbPassword.length - 4))}</Text>
@@ -627,7 +752,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     // Manuelle Eingabe (nur wenn kein Vault-Passwort)
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>DB-Passwort (optional):</Text>
         <Text color="gray">Für automatische Schema-Konfiguration (PostgREST)</Text>
         <Text color="gray">Leer lassen = später manuell via Migration</Text>
@@ -660,7 +785,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
 
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>GitHub Repository erstellen?</Text>
         <SelectInput
           items={githubOptions}
@@ -680,7 +805,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     ]
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>Dependencies automatisch installieren?</Text>
         <SelectInput
           items={yesNoOptions}
@@ -701,7 +826,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     ]
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>Mit Vercel verknüpfen?</Text>
         <SelectInput
           items={yesNoOptions}
@@ -722,7 +847,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     ]
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>Initial Commit erstellen?</Text>
         <SelectInput
           items={yesNoOptions}
@@ -744,7 +869,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     const defaultIndex = (createGithub !== 'none' && doInitialCommit) ? 0 : 1
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>Änderungen zu GitHub pushen?</Text>
         <SelectInput
           items={yesNoOptions}
@@ -765,7 +890,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     ]
     return (
       <Box flexDirection="column">
-        <WizardProgress currentStep={step} totalSteps={TOTAL_STEPS} stepTitle={STEP_TITLES[step]} />
+        <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
         <Text color="cyan" bold>Dev-Server nach Erstellung starten?</Text>
         <Text color="gray">Startet `pnpm dev` im Projekt-Verzeichnis</Text>
         <SelectInput
