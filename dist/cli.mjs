@@ -2738,7 +2738,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
         }
         const gitDir = path6.join(finalProjectPath, ".git");
         if (!fs6.existsSync(gitDir)) {
-          execSync("git init", { cwd: finalProjectPath, stdio: "ignore" });
+          execSync("git init -b main", { cwd: finalProjectPath, stdio: "ignore" });
         }
         if (ctx.repoUrl) {
           ctx.repoUrl.replace("https://", `https://${ctx.githubToken}@`);
