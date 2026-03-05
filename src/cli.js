@@ -47,6 +47,8 @@ program
 program
   .argument("[project-name]", "Name des Projekts (optional)")
   .option("-v, --verbose", "Detaillierte Debug-Ausgaben", false)
+  .option("--commit", "Git initial commit nach Erstellung", false)
+  .option("--push", "Push zu Remote (erfordert --commit)", false)
   .action(async (projectNameArg, options) => {
     const { runInitCommand } = await import("./commands/init.jsx")
     await runInitCommand(projectNameArg, options)

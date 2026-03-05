@@ -26,6 +26,43 @@ export const DEFAULTS = {
   defaultTemplateRepo: "phkoenig/kessel-boilerplate",
 }
 
+/** Presets fuer Template-Stacks (Phase 7: Clerk + SpacetimeDB) */
+export const PRESETS = {
+  "clerk-spacetimedb-ui": {
+    id: "clerk-spacetimedb-ui",
+    name: "Clerk + SpacetimeDB UI (Default)",
+    templateRepo: "phkoenig/kessel-boilerplate",
+    requiredEnv: [
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+      "CLERK_SECRET_KEY",
+    ],
+    optionalEnv: [
+      "CLERK_WEBHOOK_SIGNING_SECRET",
+      "NEXT_PUBLIC_SPACETIMEDB_ENABLED",
+      "NEXT_PUBLIC_SPACETIMEDB_URI",
+      "NEXT_PUBLIC_SPACETIMEDB_DATABASE",
+    ],
+    postSetupHooks: ["pnpm pull-env", "pnpm install"],
+  },
+  legacy: {
+    id: "legacy",
+    name: "Legacy (Supabase Auth)",
+    templateRepo: "phkoenig/kessel-boilerplate",
+    requiredEnv: [
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
+    ],
+    optionalEnv: [],
+    postSetupHooks: ["pnpm pull-env", "pnpm install"],
+  },
+}
+
+export const DEFAULT_PRESET_ID = "clerk-spacetimedb-ui"
+
 /**
  * Lade Config-Datei (falls vorhanden)
  * @returns {Object} Config-Objekt mit infraDb, devDb, etc.
