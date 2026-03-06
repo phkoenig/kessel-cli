@@ -4,7 +4,7 @@
  */
 
 import { strict as assert } from "node:assert"
-import { PRESETS, DEFAULT_PRESET_ID } from "../src/config.js"
+import { PRESETS, DEFAULT_PRESET_ID, loadServiceRoleKey } from "../src/config.js"
 
 const tests = []
 
@@ -47,6 +47,27 @@ test("clerk-spacetimedb-ui optionalEnv enthaelt SpacetimeDB", () => {
 
 test("Preset-Resolution: Ungueltiges Preset wirft nicht", () => {
   assert.strictEqual(PRESETS["invalid-preset"], undefined)
+})
+
+test("loadServiceRoleKey nutzt SERVICE_ROLE_KEY aus Environment", () => {
+  const prevServiceRoleKey = process.env.SERVICE_ROLE_KEY
+  const prevSupabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SERVICE_ROLE_KEY = " test-key-from-service-role "
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  const result = loadServiceRoleKey()
+  assert.strictEqual(result, "test-key-from-service-role")
+
+  if (prevServiceRoleKey === undefined) {
+    delete process.env.SERVICE_ROLE_KEY
+  } else {
+    process.env.SERVICE_ROLE_KEY = prevServiceRoleKey
+  }
+  if (prevSupabaseServiceRoleKey === undefined) {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+  } else {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = prevSupabaseServiceRoleKey
+  }
 })
 
 async function run() {

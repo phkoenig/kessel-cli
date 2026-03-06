@@ -266,7 +266,7 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
         }
         
         try {
-          const templateRepo = "phkoenig/kessel-boilerplate"
+          const templateRepo = config.defaultTemplateRepo || "phkoenig/kessel-boilerplate"
           const gitUrl = `https://${ctx.githubToken}@github.com/${templateRepo}.git`
           
           debug(taskCtx, `Git clone: ${templateRepo} → ${finalProjectPath}`)
@@ -305,7 +305,7 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
           debug(taskCtx, `Git clone fehlgeschlagen: ${error.message}`)
           // Fallback zu degit
           try {
-            const templateRepo = "phkoenig/kessel-boilerplate"
+            const templateRepo = config.defaultTemplateRepo || "phkoenig/kessel-boilerplate"
             debug(taskCtx, `Versuche degit Fallback...`)
             const emitter = degit(`${templateRepo}#main`, {
               cache: false,

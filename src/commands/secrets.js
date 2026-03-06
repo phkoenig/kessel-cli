@@ -1,7 +1,7 @@
 import { program } from "commander"
 import chalk from "chalk"
 import { createClient } from "@supabase/supabase-js"
-import { loadConfig, loadServiceRoleKey, BOILERPLATE_ENV_PATH } from "../config.js"
+import { loadConfig, loadServiceRoleKey } from "../config.js"
 import { debugLog, debugError, maskSecret } from "../utils/debug.js"
 import { getSecretsViaDirectSql, callRpcViaHttp } from "../utils/supabase.js"
 import path from "path"

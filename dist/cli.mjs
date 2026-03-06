@@ -157,9 +157,31 @@ var config_exports = {};
 __export(config_exports, {
   BOILERPLATE_ENV_PATH: () => BOILERPLATE_ENV_PATH,
   DEFAULTS: () => DEFAULTS,
+  DEFAULT_PRESET_ID: () => DEFAULT_PRESET_ID,
+  PRESETS: () => PRESETS,
   loadConfig: () => loadConfig,
-  loadServiceRoleKey: () => loadServiceRoleKey
+  loadServiceRoleKey: () => loadServiceRoleKey,
+  resolveBoilerplateEnvPath: () => resolveBoilerplateEnvPath
 });
+function getBoilerplateEnvPathCandidates() {
+  const candidates = [
+    process.env.KESSEL_BOILERPLATE_ENV_PATH,
+    path4.resolve(process.cwd(), ".env"),
+    path4.resolve(process.cwd(), "kessel-boilerplate", ".env"),
+    path4.resolve(process.cwd(), "..", "kessel-boilerplate", ".env"),
+    path4.resolve(__dirname$1, "..", ".env"),
+    path4.resolve(__dirname$1, "..", "..", "kessel-boilerplate", ".env")
+  ].filter(Boolean);
+  return [...new Set(candidates)];
+}
+function resolveBoilerplateEnvPath() {
+  for (const candidate of getBoilerplateEnvPathCandidates()) {
+    if (fs6.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
 function loadConfig() {
   const configPath = path4.join(__dirname$1, "..", "config.json");
   if (fs6.existsSync(configPath)) {
@@ -190,10 +212,15 @@ function loadConfig() {
   };
 }
 function loadServiceRoleKey() {
-  if (fs6.existsSync(BOILERPLATE_ENV_PATH)) {
+  const directEnvKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SERVICE_ROLE_KEY;
+  if (directEnvKey && directEnvKey.trim().length > 0) {
+    return directEnvKey.trim();
+  }
+  const envPath = resolveBoilerplateEnvPath();
+  if (envPath && fs6.existsSync(envPath)) {
     try {
-      const envContent = fs6.readFileSync(BOILERPLATE_ENV_PATH, "utf-8");
-      const match = envContent.match(/SERVICE_ROLE_KEY=(.+)/);
+      const envContent = fs6.readFileSync(envPath, "utf-8");
+      const match = envContent.match(/(?:^|\n)(?:SERVICE_ROLE_KEY|SUPABASE_SERVICE_ROLE_KEY)=(.+)/);
       if (match && match[1]) {
         return match[1].trim();
       }
@@ -202,17 +229,20 @@ function loadServiceRoleKey() {
       return null;
     }
   } else {
-    console.error(chalk11.red(`\u274C .env Datei nicht gefunden: ${BOILERPLATE_ENV_PATH}`));
+    const candidates = getBoilerplateEnvPathCandidates();
+    console.error(chalk11.red("\u274C Keine passende .env fuer SERVICE_ROLE_KEY gefunden."));
+    console.error(chalk11.yellow("   Setze SERVICE_ROLE_KEY direkt als Environment-Variable"));
+    console.error(chalk11.dim(`   Gepruefte Pfade: ${candidates.join(", ")}`));
     return null;
   }
   return null;
 }
-var __filename$1, __dirname$1, BOILERPLATE_ENV_PATH, DEFAULTS;
+var __filename$1, __dirname$1, BOILERPLATE_ENV_PATH, DEFAULTS, PRESETS, DEFAULT_PRESET_ID;
 var init_config = __esm({
   "src/config.js"() {
     __filename$1 = fileURLToPath(import.meta.url);
     __dirname$1 = path4.dirname(__filename$1);
-    BOILERPLATE_ENV_PATH = "B:/Nextcloud/CODE/proj/kessel-boilerplate/.env";
+    BOILERPLATE_ENV_PATH = resolveBoilerplateEnvPath();
     DEFAULTS = {
       infraDb: {
         name: "Kessel",
@@ -228,6 +258,40 @@ var init_config = __esm({
       },
       defaultTemplateRepo: "phkoenig/kessel-boilerplate"
     };
+    PRESETS = {
+      "clerk-spacetimedb-ui": {
+        id: "clerk-spacetimedb-ui",
+        name: "Clerk + SpacetimeDB UI (Default)",
+        templateRepo: "phkoenig/kessel-boilerplate",
+        requiredEnv: [
+          "NEXT_PUBLIC_SUPABASE_URL",
+          "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+          "SUPABASE_SERVICE_ROLE_KEY",
+          "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+          "CLERK_SECRET_KEY"
+        ],
+        optionalEnv: [
+          "CLERK_WEBHOOK_SIGNING_SECRET",
+          "NEXT_PUBLIC_SPACETIMEDB_ENABLED",
+          "NEXT_PUBLIC_SPACETIMEDB_URI",
+          "NEXT_PUBLIC_SPACETIMEDB_DATABASE"
+        ],
+        postSetupHooks: ["pnpm pull-env", "pnpm install"]
+      },
+      legacy: {
+        id: "legacy",
+        name: "Legacy (Supabase Auth)",
+        templateRepo: "phkoenig/kessel-boilerplate",
+        requiredEnv: [
+          "NEXT_PUBLIC_SUPABASE_URL",
+          "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+          "SUPABASE_SERVICE_ROLE_KEY"
+        ],
+        optionalEnv: [],
+        postSetupHooks: ["pnpm pull-env", "pnpm install"]
+      }
+    };
+    DEFAULT_PRESET_ID = "clerk-spacetimedb-ui";
   }
 });
 function maskSecret(secret) {
@@ -2728,7 +2792,7 @@ function createProjectTasks(config, ctx, projectPath, options = {}) {
           }
         }
         try {
-          const templateRepo = "phkoenig/kessel-boilerplate";
+          const templateRepo = config.defaultTemplateRepo || "phkoenig/kessel-boilerplate";
           const gitUrl = `https://${ctx.githubToken}@github.com/${templateRepo}.git`;
           debug(taskCtx, `Git clone: ${templateRepo} \u2192 ${finalProjectPath}`);
           execSync(
@@ -2759,7 +2823,7 @@ function createProjectTasks(config, ctx, projectPath, options = {}) {
         } catch (error) {
           debug(taskCtx, `Git clone fehlgeschlagen: ${error.message}`);
           try {
-            const templateRepo = "phkoenig/kessel-boilerplate";
+            const templateRepo = config.defaultTemplateRepo || "phkoenig/kessel-boilerplate";
             debug(taskCtx, `Versuche degit Fallback...`);
             const emitter = degit(`${templateRepo}#main`, {
               cache: false,
@@ -3978,7 +4042,7 @@ program.command("version").description("Zeigt CLI und Boilerplate Version").acti
   console.log(`Kessel CLI: v${CLI_VERSION}`);
   console.log(`Boilerplate: v${BOILERPLATE_VERSION}`);
 });
-program.argument("[project-name]", "Name des Projekts (optional)").option("-v, --verbose", "Detaillierte Debug-Ausgaben", false).action(async (projectNameArg, options) => {
+program.argument("[project-name]", "Name des Projekts (optional)").option("-v, --verbose", "Detaillierte Debug-Ausgaben", false).option("--commit", "Git initial commit nach Erstellung", false).option("--push", "Push zu Remote (erfordert --commit)", false).action(async (projectNameArg, options) => {
   const { runInitCommand: runInitCommand2 } = await Promise.resolve().then(() => (init_init(), init_exports));
   await runInitCommand2(projectNameArg, options);
 });

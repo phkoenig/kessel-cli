@@ -6,8 +6,38 @@ import chalk from "chalk"
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Pfad zur kessel-boilerplate .env Datei (absoluter Pfad)
-export const BOILERPLATE_ENV_PATH = "B:/Nextcloud/CODE/proj/kessel-boilerplate/.env"
+/**
+ * Kandidatenpfade fuer die Boilerplate-.env.
+ * Reihenfolge: explizit konfiguriert -> aktuelles Projekt -> typische Nachbarpfade.
+ */
+function getBoilerplateEnvPathCandidates() {
+  const candidates = [
+    process.env.KESSEL_BOILERPLATE_ENV_PATH,
+    path.resolve(process.cwd(), ".env"),
+    path.resolve(process.cwd(), "kessel-boilerplate", ".env"),
+    path.resolve(process.cwd(), "..", "kessel-boilerplate", ".env"),
+    path.resolve(__dirname, "..", ".env"),
+    path.resolve(__dirname, "..", "..", "kessel-boilerplate", ".env"),
+  ].filter(Boolean)
+
+  return [...new Set(candidates)]
+}
+
+/**
+ * Ermittelt den ersten vorhandenen Boilerplate-.env-Pfad.
+ * @returns {string|null}
+ */
+export function resolveBoilerplateEnvPath() {
+  for (const candidate of getBoilerplateEnvPathCandidates()) {
+    if (fs.existsSync(candidate)) {
+      return candidate
+    }
+  }
+  return null
+}
+
+// Legacy-Export fuer bestehende Importe
+export const BOILERPLATE_ENV_PATH = resolveBoilerplateEnvPath()
 
 // Default-Werte
 export const DEFAULTS = {
@@ -104,10 +134,18 @@ export function loadConfig() {
  * @returns {string|null} Service Role Key oder null
  */
 export function loadServiceRoleKey() {
-  if (fs.existsSync(BOILERPLATE_ENV_PATH)) {
+  // 1) Hoechste Prioritaet: direkt aus Env (CI/Server/anderer Rechner)
+  const directEnvKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SERVICE_ROLE_KEY
+  if (directEnvKey && directEnvKey.trim().length > 0) {
+    return directEnvKey.trim()
+  }
+
+  // 2) Fallback: aus lokaler Boilerplate-.env lesen
+  const envPath = resolveBoilerplateEnvPath()
+  if (envPath && fs.existsSync(envPath)) {
     try {
-      const envContent = fs.readFileSync(BOILERPLATE_ENV_PATH, "utf-8")
-      const match = envContent.match(/SERVICE_ROLE_KEY=(.+)/)
+      const envContent = fs.readFileSync(envPath, "utf-8")
+      const match = envContent.match(/(?:^|\n)(?:SERVICE_ROLE_KEY|SUPABASE_SERVICE_ROLE_KEY)=(.+)/)
       if (match && match[1]) {
         return match[1].trim()
       }
@@ -116,7 +154,10 @@ export function loadServiceRoleKey() {
       return null
     }
   } else {
-    console.error(chalk.red(`❌ .env Datei nicht gefunden: ${BOILERPLATE_ENV_PATH}`))
+    const candidates = getBoilerplateEnvPathCandidates()
+    console.error(chalk.red("❌ Keine passende .env fuer SERVICE_ROLE_KEY gefunden."))
+    console.error(chalk.yellow("   Setze SERVICE_ROLE_KEY direkt als Environment-Variable"))
+    console.error(chalk.dim(`   Gepruefte Pfade: ${candidates.join(", ")}`))
     return null
   }
   return null
