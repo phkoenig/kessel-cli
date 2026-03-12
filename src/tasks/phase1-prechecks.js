@@ -2,10 +2,10 @@ import { Listr } from "listr2"
 import {
   checkGitHubCLI,
   checkVercelCLI,
+  checkOnePasswordCLI,
   checkSupabaseCLI,
   checkPackageManager,
 } from "../../lib/prechecks.js"
-import { createClient } from "@supabase/supabase-js"
 
 /**
  * Erstellt listr2 Tasks für Phase 1: Pre-Checks
@@ -53,6 +53,18 @@ export function createPrecheckTasks(config, options = {}) {
       skip: () => !config.linkVercel,
     },
     {
+      title: "1Password CLI",
+      task: async (_ctx, task) => {
+        try {
+          await checkOnePasswordCLI(null, true)
+          task.title = "1Password CLI ✓"
+        } catch (error) {
+          task.title = `1Password CLI ✗ (${error.message})`
+          throw error
+        }
+      },
+    },
+    {
       title: "Supabase CLI",
       task: async (ctx, task) => {
         try {
@@ -77,50 +89,48 @@ export function createPrecheckTasks(config, options = {}) {
       },
     },
     {
-      title: "INFRA-DB Verbindung",
+      title: "App-Supabase Verbindung",
       task: async (ctx, task) => {
         try {
-          const supabase = createClient(config.infraDb.url, config.serviceRoleKey, {
-            auth: {
-              autoRefreshToken: false,
-              persistSession: false,
-            },
-          })
-          
+          const appDbUrl = config.appDb?.url || config.devDb?.url || config.infraDb?.url
           // Teste Verbindung
-          const response = await fetch(`${config.infraDb.url}/rest/v1/`, {
+          const response = await fetch(`${appDbUrl}/rest/v1/`, {
             method: "GET",
             headers: { apikey: "test" },
           })
           
           if (response.status !== 401 && response.status !== 200) {
-            throw new Error(`INFRA-DB antwortet mit Status ${response.status}`)
+            throw new Error(`App-Supabase antwortet mit Status ${response.status}`)
           }
           
-          task.title = "INFRA-DB Verbindung ✓"
+          task.title = "App-Supabase Verbindung ✓"
         } catch (error) {
-          task.title = "INFRA-DB Verbindung ✗"
+          task.title = "App-Supabase Verbindung ✗"
           throw error
         }
       },
     },
     {
-      title: "DEV-DB Verbindung",
+      title: "SpacetimeDB CLI",
       task: async (ctx, task) => {
+        if (config.spacetimeMode === 'skip') {
+          task.skip("SpacetimeDB uebersprungen")
+          return
+        }
+        
         try {
-          const response = await fetch(`${config.devDb.url}/rest/v1/`, {
-            method: "GET",
-            headers: { apikey: "test" },
-          })
-          
-          if (response.status !== 401 && response.status !== 200) {
-            throw new Error(`DEV-DB antwortet mit Status ${response.status}`)
+          const { execSync } = await import('child_process')
+          const version = execSync("spacetime version", { stdio: "pipe" }).toString().trim()
+          ctx.spacetimeInstalled = true
+          task.title = `SpacetimeDB CLI ✓ (${version})`
+        } catch {
+          ctx.spacetimeInstalled = false
+          if (config.spacetimeMode === 'publish') {
+            task.title = "SpacetimeDB CLI ✗ (wird fuer Publish benoetigt)"
+            debug(ctx, "SpacetimeDB CLI nicht gefunden. Install: https://spacetimedb.com/install")
+          } else {
+            task.title = "SpacetimeDB CLI (optional)"
           }
-          
-          task.title = "DEV-DB Verbindung ✓"
-        } catch (error) {
-          task.title = "DEV-DB Verbindung ✗"
-          throw error
         }
       },
     },

@@ -1,7 +1,8 @@
 import enquirer from "enquirer"
 import { loadProfile, normalizeUsername, getProfileDir } from "../../lib/profile.js"
 import { DEFAULTS } from "../config.js"
-import { fetchServiceRoleKeyFromSupabase, fetchServiceRoleKeyFromVault } from "../utils/supabase.js"
+import { fetchServiceRoleKeyFromSupabase } from "../utils/supabase.js"
+import { fetchServiceRoleKeyFromOnePassword } from "../utils/onepassword.js"
 import fs from "fs"
 import path from "path"
 import chalk from "chalk"
@@ -177,7 +178,7 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
   const { infraUrl } = await enquirer.prompt({
     type: 'input',
     name: 'infraUrl',
-    message: 'INFRA-DB URL (Kessel - Auth, Vault, Multi-Tenant):',
+    message: 'INFRA-DB URL (Kessel - Core/App-Supabase-Management):',
     initial: infraUrlDefault,
     validate: (value) => {
       if (!value || value.trim().length === 0) {
@@ -214,20 +215,20 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
   // 4. SERVICE_ROLE_KEY - Versuche automatisch zu holen
   const infraProjectRef = infraUrl ? new URL(infraUrl).hostname.split(".")[0] : null
   
-  // Versuche 1: Aus Vault holen (wenn temporärer Key vorhanden)
+  // Versuche 1: Aus 1Password holen
   let serviceRoleKey = null
   const tempServiceRoleKey = profile?.SUPABASE_SERVICE_ROLE_KEY || profile?.SUPABASE_VAULT_SERVICE_ROLE_KEY
   
-  if (tempServiceRoleKey && infraUrl) {
-    console.log(chalk.blue("🔍 Versuche SERVICE_ROLE_KEY aus Vault zu holen..."))
-    serviceRoleKey = await fetchServiceRoleKeyFromVault(infraUrl, tempServiceRoleKey, (msg) => {
+  if (infraUrl) {
+    console.log(chalk.blue("🔍 Versuche SERVICE_ROLE_KEY aus 1Password zu holen..."))
+    serviceRoleKey = await fetchServiceRoleKeyFromOnePassword(() => {
       // Silent - keine Debug-Ausgaben im Wizard
     })
     
     if (serviceRoleKey) {
-      console.log(chalk.green("✓ SERVICE_ROLE_KEY aus Vault geholt"))
+      console.log(chalk.green("✓ SERVICE_ROLE_KEY aus 1Password geholt"))
     } else {
-      console.log(chalk.yellow("⚠️  Vault-Zugriff fehlgeschlagen, versuche Management API..."))
+      console.log(chalk.yellow("⚠️  1Password-Zugriff fehlgeschlagen, versuche Management API..."))
     }
   }
   
@@ -255,7 +256,7 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
     const prompt = await enquirer.prompt({
       type: 'password',
       name: 'serviceRoleKey',
-      message: 'SERVICE_ROLE_KEY (für INFRA-DB/Vault-Zugriff):',
+      message: 'SERVICE_ROLE_KEY (für App-Supabase/Bootstrap):',
       initial: '',
       validate: (value) => {
         if (!value || value.trim().length === 0) {
@@ -285,6 +286,104 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
     },
   })
   
+  // 5b. Supabase-Projekt-Modus
+  const { supabaseMode } = await enquirer.prompt({
+    type: 'select',
+    name: 'supabaseMode',
+    message: 'Supabase-Projekt fuer diese Ableitung:',
+    choices: [
+      { name: 'shared', message: 'Shared (INFRA-DB / DEV-DB mitnutzen)' },
+      { name: 'dedicated', message: 'Eigenes Supabase-Projekt (empfohlen fuer Produktion)' },
+    ],
+    initial: 0,
+  })
+
+  let dedicatedSupabaseUrl = null
+  let dedicatedSupabaseRef = null
+  if (supabaseMode === 'dedicated') {
+    const { dedicatedUrl } = await enquirer.prompt({
+      type: 'input',
+      name: 'dedicatedUrl',
+      message: 'URL des dedizierten Supabase-Projekts (z.B. https://xyz.supabase.co):',
+      validate: (value) => {
+        if (!value || value.trim().length === 0) {
+          return 'URL ist erforderlich'
+        }
+        try {
+          new URL(value)
+          return true
+        } catch {
+          return 'Bitte eine gueltige URL eingeben'
+        }
+      },
+    })
+    dedicatedSupabaseUrl = dedicatedUrl.trim()
+    dedicatedSupabaseRef = new URL(dedicatedSupabaseUrl).hostname.split(".")[0]
+  }
+
+  // 5c. Clerk Application
+  const { clerkMode } = await enquirer.prompt({
+    type: 'select',
+    name: 'clerkMode',
+    message: 'Clerk Application fuer diese Ableitung:',
+    choices: [
+      { name: 'shared', message: 'Shared (gleiche Clerk Application wie Boilerplate)' },
+      { name: 'dedicated', message: 'Eigene Clerk Application (eigener User Pool)' },
+    ],
+    initial: 0,
+  })
+
+  let clerkPublishableKey = null
+  let clerkSecretKey = null
+  if (clerkMode === 'dedicated') {
+    console.log(chalk.blue("\nℹ️  Erstelle eine neue Application im Clerk Dashboard:"))
+    console.log(chalk.blue("   https://dashboard.clerk.com → Create Application"))
+    console.log(chalk.blue("   Kopiere dann die API Keys hierher.\n"))
+
+    const clerkPrompts = await enquirer.prompt([
+      {
+        type: 'input',
+        name: 'clerkPublishableKey',
+        message: 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY (pk_test_...):',
+        validate: (v) => v.startsWith('pk_') ? true : 'Muss mit pk_ beginnen',
+      },
+      {
+        type: 'password',
+        name: 'clerkSecretKey',
+        message: 'CLERK_SECRET_KEY (sk_test_...):',
+        validate: (v) => v.startsWith('sk_') ? true : 'Muss mit sk_ beginnen',
+      },
+    ])
+    clerkPublishableKey = clerkPrompts.clerkPublishableKey
+    clerkSecretKey = clerkPrompts.clerkSecretKey
+  }
+
+  // 5d. SpacetimeDB Modul
+  const { spacetimeMode } = await enquirer.prompt({
+    type: 'select',
+    name: 'spacetimeMode',
+    message: 'SpacetimeDB Modul:',
+    choices: [
+      { name: 'publish', message: 'Neues Modul publizieren (empfohlen)' },
+      { name: 'existing', message: 'Bestehendes Modul verwenden' },
+      { name: 'skip', message: 'SpacetimeDB ueberspringen' },
+    ],
+    initial: 0,
+  })
+
+  let spacetimeDatabase = null
+  if (spacetimeMode === 'existing') {
+    const { stdbName } = await enquirer.prompt({
+      type: 'input',
+      name: 'stdbName',
+      message: 'SpacetimeDB Datenbankname:',
+      validate: (v) => v.trim().length > 0 ? true : 'Name ist erforderlich',
+    })
+    spacetimeDatabase = stdbName.trim()
+  } else if (spacetimeMode === 'publish') {
+    spacetimeDatabase = `${projectName}-core`
+  }
+
   // 6. GitHub Repo Option
   const { createGithub } = await enquirer.prompt({
     type: 'select',
@@ -350,12 +449,24 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
       projectRef: devProjectRef,
     },
     serviceRoleKey: serviceRoleKey.trim(),
+    supabaseMode,
+    dedicatedSupabase: dedicatedSupabaseUrl ? {
+      url: dedicatedSupabaseUrl,
+      projectRef: dedicatedSupabaseRef,
+    } : null,
+    clerkMode,
+    clerkKeys: clerkPublishableKey ? {
+      publishableKey: clerkPublishableKey,
+      secretKey: clerkSecretKey,
+    } : null,
+    spacetimeMode,
+    spacetimeDatabase,
     createGithub,
     autoInstallDeps,
     linkVercel,
     doInitialCommit,
     doPush,
-    profile, // Gespeichertes Profil für später
+    profile,
   }
 }
 
