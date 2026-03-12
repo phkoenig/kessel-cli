@@ -8,6 +8,51 @@ import chalk from "chalk"
 import { fetchAnonKeyFromSupabase, fetchServiceRoleKeyFromSupabase } from "../utils/supabase.js"
 
 /**
+ * Aktualisiert boilerplate.json mit projektspezifischen Metadaten.
+ */
+function updateBoilerplateJson(projectPath, config, debug, taskCtx) {
+  const bpPath = path.join(projectPath, 'boilerplate.json')
+  if (!fs.existsSync(bpPath)) return
+  
+  try {
+    const bp = JSON.parse(fs.readFileSync(bpPath, 'utf8'))
+    bp.name = config.projectName
+    bp.version = '0.1.0'
+    bp.description = `${config.projectName} – App basierend auf Kessel Boilerplate 3.0`
+    bp.basedOn = config.defaultTemplateRepo || 'github.com/phkoenig/kessel-boilerplate'
+    
+    if (config.devDb?.projectRef) {
+      bp.supabase = bp.supabase || {}
+      bp.supabase.project = config.devDb.projectRef
+    }
+    
+    fs.writeFileSync(bpPath, JSON.stringify(bp, null, 2))
+    debug(taskCtx, `boilerplate.json aktualisiert`)
+  } catch (e) {
+    debug(taskCtx, `boilerplate.json Update fehlgeschlagen: ${e.message}`)
+  }
+}
+
+/**
+ * Passt 1Password-Referenzen in pull-env.manifest.json an den Projekt-Prefix an.
+ * Ersetzt "KB - " durch "<PROJEKTNAME> - " in allen opReference-Pfaden.
+ */
+function updatePullEnvManifest(projectPath, config, debug, taskCtx) {
+  const manifestPath = path.join(projectPath, 'scripts', 'pull-env.manifest.json')
+  if (!fs.existsSync(manifestPath)) return
+  
+  try {
+    let content = fs.readFileSync(manifestPath, 'utf8')
+    const projectPrefix = config.projectName.toUpperCase()
+    content = content.replace(/KB - /g, `${projectPrefix} - `)
+    fs.writeFileSync(manifestPath, content)
+    debug(taskCtx, `pull-env.manifest.json: Prefix auf "${projectPrefix} - " geaendert`)
+  } catch (e) {
+    debug(taskCtx, `pull-env.manifest.json Update fehlgeschlagen: ${e.message}`)
+  }
+}
+
+/**
  * Log-Datei für Projekt-Erstellung
  */
 let logFile = null
@@ -299,6 +344,12 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
             debug(taskCtx, `package.json aktualisiert: name=${config.projectName}`)
           }
           
+          // boilerplate.json mit Projekt-Metadaten aktualisieren
+          updateBoilerplateJson(finalProjectPath, config, debug, taskCtx)
+          
+          // pull-env.manifest.json: 1Password-Prefix anpassen
+          updatePullEnvManifest(finalProjectPath, config, debug, taskCtx)
+          
           task.title = "2/13: Template geklont ✓"
           initializeLog() // Log initialisieren
         } catch (error) {
@@ -324,6 +375,12 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
               debug(taskCtx, `package.json aktualisiert: name=${config.projectName}`)
             }
             
+            // boilerplate.json mit Projekt-Metadaten aktualisieren
+            updateBoilerplateJson(finalProjectPath, config, debug, taskCtx)
+            
+            // pull-env.manifest.json: 1Password-Prefix anpassen
+            updatePullEnvManifest(finalProjectPath, config, debug, taskCtx)
+            
             task.title = "2/13: Template geklont (degit) ✓"
             initializeLog() // Log initialisieren
           } catch (degitError) {
@@ -343,8 +400,8 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
           return
         }
         
-        const envContent = `# Bootstrap-Credentials für Vault-Zugriff (INFRA-DB)
-# WICHTIG: Dies ist die URL der INFRA-DB (Kessel) mit integriertem Vault
+        const envContent = `# Bootstrap-Credentials fuer App-Supabase und pnpm pull-env
+# WICHTIG: Diese Datei enthaelt nur den minimalen Bootstrap fuer 1Password + Supabase
 NEXT_PUBLIC_SUPABASE_URL=${config.infraDb.url}
 SERVICE_ROLE_KEY=${config.serviceRoleKey}
 `
@@ -379,23 +436,23 @@ SERVICE_ROLE_KEY=${config.serviceRoleKey}
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ')
         
-        const envLocalContent = `# Public-Credentials für Next.js Client
-# Multi-Tenant Architektur: INFRA-DB (Auth, Vault) + DEV-DB (App-Daten)
-# Tenant-Isolation erfolgt über RLS Policies basierend auf tenant_id im JWT
+        const envLocalContent = `# Public-Credentials fuer Next.js Client
+# Boilerplate 3.0: Clerk + Spacetime-Core + App-Supabase
+# Tenant-Isolation und Core-Daten laufen nicht mehr ueber einen Supabase-Vault
 
 # App-Name (wird im UI angezeigt)
 NEXT_PUBLIC_APP_NAME=${appName}
 
-# INFRA-DB (Kessel) - Auth, Vault, Multi-Tenant
+# App-Supabase Bootstrap
 NEXT_PUBLIC_SUPABASE_URL=${config.infraDb.url}
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${cleanAnonKey}
 NEXT_PUBLIC_TENANT_SLUG=${config.schemaName}
 
 # DEV-DB - App-Daten, Entwicklung
-# Hinweis: Kann gleich INFRA-DB sein oder separate DB für fachliche Daten
+# Hinweis: Kann gleich App-Supabase sein oder separate DB fuer fachliche Daten
 NEXT_PUBLIC_DEV_SUPABASE_URL=${config.devDb.url}
 
-# Service Role Key für Server-Side Operationen (User-Erstellung, etc.)
+# Service Role Key fuer Server-Side Operationen und pull-env-Bootstrap
 SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
 
 # ════════════════════════════════════════════════════════════════════
@@ -468,7 +525,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
       skip: () => !config.autoInstallDeps,
     },
     {
-      title: "7/13: Secrets aus Vault laden (pnpm pull-env)",
+      title: "7/13: Secrets aus 1Password laden (pnpm pull-env)",
       task: async (taskCtx, task) => {
         if (!config.autoInstallDeps) {
           task.skip("Übersprungen (keine Dependencies installiert)")
@@ -477,7 +534,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
         
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: pnpm pull-env würde ausgeführt werden`)
-          task.title = "7/13: Secrets aus Vault (DRY-RUN) ✓"
+          task.title = "7/13: Secrets aus 1Password (DRY-RUN) ✓"
           return
         }
         
@@ -493,14 +550,14 @@ NEXT_PUBLIC_AUTH_BYPASS=true
               SERVICE_ROLE_KEY: ctx.serviceRoleKey,
             }
           })
-          debug(taskCtx, `Secrets erfolgreich aus Vault geladen`)
-          writeLog(`Secrets aus Vault geladen (pnpm pull-env)`, 'OK')
-          task.title = "7/13: Secrets aus Vault geladen ✓"
+          debug(taskCtx, `Secrets erfolgreich aus 1Password geladen`)
+          writeLog(`Secrets aus 1Password geladen (pnpm pull-env)`, 'OK')
+          task.title = "7/13: Secrets aus 1Password geladen ✓"
         } catch (error) {
           debug(taskCtx, `pull-env Fehler: ${error.message}`)
           writeLog(`pull-env Fehler: ${error.message}`, 'WARN')
           // Nicht kritisch - User kann manuell pnpm pull-env ausführen
-          task.title = "7/13: Secrets aus Vault ⚠ (manuell: pnpm pull-env)"
+          task.title = "7/13: Secrets aus 1Password ⚠ (manuell: pnpm pull-env)"
         }
       },
       skip: () => !config.autoInstallDeps,
