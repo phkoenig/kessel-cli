@@ -10,7 +10,6 @@ import chalk from "chalk"
  * Laedt existierendes Profil (lokal oder systemweit)
  */
 export async function loadExistingProfile(projectRoot) {
-  // 1. Suche lokales Profil
   if (projectRoot) {
     try {
       const localProfileFiles = fs.readdirSync(projectRoot)
@@ -22,9 +21,7 @@ export async function loadExistingProfile(projectRoot) {
           try {
             const stats = fs.statSync(filePath)
             return { file, path: filePath, mtime: stats.mtime }
-          } catch {
-            return null
-          }
+          } catch { return null }
         }).filter(Boolean)
         
         if (localProfilesWithStats.length > 0) {
@@ -35,66 +32,39 @@ export async function loadExistingProfile(projectRoot) {
           try {
             const content = fs.readFileSync(newest.path, "utf-8")
             const profile = {}
-            const lines = content.split("\n")
-            for (const line of lines) {
+            for (const line of content.split("\n")) {
               const trimmed = line.trim()
               if (!trimmed || trimmed.startsWith("#")) continue
               const match = trimmed.match(/^([^=]+)=(.*)$/)
-              if (match) {
-                const key = match[1].trim()
-                const value = match[2].trim().replace(/^["']|["']$/g, "")
-                profile[key] = value
-              }
+              if (match) profile[match[1].trim()] = match[2].trim().replace(/^["']|["']$/g, "")
             }
-            
-            const profileUsername = profile.USERNAME || usernameFromFile
-            if (profileUsername) {
-              profile.USERNAME = profileUsername
-              return { profile, source: "local", username: profileUsername }
-            }
-          } catch {
-            // Ignorieren
-          }
+            profile.USERNAME = profile.USERNAME || usernameFromFile
+            if (profile.USERNAME) return { profile, source: "local", username: profile.USERNAME }
+          } catch { /* ignore */ }
         }
       }
-    } catch {
-      // Ignorieren
-    }
+    } catch { /* ignore */ }
   }
   
-  // 2. Suche systemweites Profil
   try {
     const profileDir = getProfileDir()
     if (fs.existsSync(profileDir)) {
-      const files = fs.readdirSync(profileDir)
-      const profileFiles = files.filter(f => f.endsWith('.kesselprofile'))
-      
+      const profileFiles = fs.readdirSync(profileDir).filter(f => f.endsWith('.kesselprofile'))
       if (profileFiles.length > 0) {
         const profilesWithStats = profileFiles.map(file => {
           const filePath = path.join(profileDir, file)
-          try {
-            const stats = fs.statSync(filePath)
-            return { file, path: filePath, mtime: stats.mtime }
-          } catch {
-            return null
-          }
+          try { return { file, path: filePath, mtime: fs.statSync(filePath).mtime } } catch { return null }
         }).filter(Boolean)
         
         if (profilesWithStats.length > 0) {
           profilesWithStats.sort((a, b) => b.mtime - a.mtime)
-          const newest = profilesWithStats[0]
-          const usernameFromFile = newest.file.replace('.kesselprofile', '')
+          const usernameFromFile = profilesWithStats[0].file.replace('.kesselprofile', '')
           const profile = loadProfile(usernameFromFile)
-          
-          if (profile && profile.USERNAME) {
-            return { profile, source: "system", username: usernameFromFile }
-          }
+          if (profile?.USERNAME) return { profile, source: "system", username: usernameFromFile }
         }
       }
     }
-  } catch {
-    // Ignorieren
-  }
+  } catch { /* ignore */ }
   
   return null
 }
@@ -103,101 +73,110 @@ export async function loadExistingProfile(projectRoot) {
  * Wizard fuer Projekt-Initialisierung (Boilerplate 3.0 Architektur)
  * 
  * Neues Schema: Supabase (App-Daten) + Clerk (Auth) + SpacetimeDB (UX-Core)
- * Die alte INFRA-DB / DEV-DB Trennung entfaellt.
+ * Alle drei Services sind optional -- man kann sie spaeter verbinden.
  */
 export async function runInitWizard(projectNameArg = null, projectRoot = null) {
   const existing = await loadExistingProfile(projectRoot)
   const profile = existing?.profile || null
 
-  // 1. Username
+  // ── 1. Username ──
   const { username } = await enquirer.prompt({
     type: 'input',
     name: 'username',
     message: 'Dein Username:',
     initial: profile?.USERNAME || existing?.username || '',
-    validate: (value) => {
-      if (!value || value.trim().length === 0) return 'Username ist erforderlich'
-      return true
-    },
+    validate: (v) => v?.trim().length > 0 ? true : 'Username ist erforderlich',
   })
-  
   const normalizedUsername = normalizeUsername(username)
 
-  // 2. Projektname
+  // ── 2. Projektname ──
   const currentDirName = projectRoot ? path.basename(projectRoot) : 'mein-projekt'
-  const normalizedDirName = currentDirName.replace(/_/g, "-").toLowerCase()
-  const defaultProjectName = projectNameArg || normalizedDirName
+  const defaultProjectName = projectNameArg || currentDirName.replace(/_/g, "-").toLowerCase()
 
   const { projectName } = await enquirer.prompt({
     type: 'input',
     name: 'projectName',
     message: 'Projektname:',
     initial: defaultProjectName,
-    validate: (value) => {
-      if (!/^[a-z0-9-]+$/.test(value)) {
-        return 'Nur Kleinbuchstaben, Zahlen und Bindestriche'
-      }
-      return true
-    },
+    validate: (v) => /^[a-z0-9-]+$/.test(v) ? true : 'Nur Kleinbuchstaben, Zahlen und Bindestriche',
   })
 
-  const projectPrefix = projectName.toUpperCase()
   const schemaName = projectName.replace(/-/g, "_").toLowerCase()
 
-  // 3. Supabase-Projekt (fuer App-Daten)
+  // ── 3. Supabase (App-Datenbank) ──
   console.log(chalk.blue("\n── Supabase (App-Datenbank) ──────────────────────"))
-  
-  const { supabaseUrl } = await enquirer.prompt({
-    type: 'input',
-    name: 'supabaseUrl',
-    message: 'Supabase-Projekt URL:',
-    initial: profile?.SUPABASE_URL || '',
-    validate: (value) => {
-      if (!value || value.trim().length === 0) return 'URL ist erforderlich'
-      try { new URL(value); return true } catch { return 'Bitte eine gueltige URL eingeben' }
-    },
+
+  const { supabaseSetup } = await enquirer.prompt({
+    type: 'select',
+    name: 'supabaseSetup',
+    message: 'Supabase-Projekt:',
+    choices: [
+      { name: 'now', message: 'Jetzt verbinden (URL + Keys eingeben)' },
+      { name: 'later', message: 'Spaeter einrichten (Projekt wird ohne Supabase erstellt)' },
+    ],
+    initial: 0,
   })
 
-  const supabaseProjectRef = new URL(supabaseUrl.trim()).hostname.split(".")[0]
-
-  // Service Role Key
+  let supabase = null
   let serviceRoleKey = null
-  console.log(chalk.blue("🔍 Versuche SERVICE_ROLE_KEY aus 1Password zu holen..."))
-  serviceRoleKey = await fetchServiceRoleKeyFromOnePassword(() => {})
-  
-  if (serviceRoleKey) {
-    console.log(chalk.green("✓ SERVICE_ROLE_KEY aus 1Password geholt"))
-  } else {
-    console.log(chalk.yellow("⚠️  Nicht automatisch gefunden"))
-    const prompt = await enquirer.prompt({
-      type: 'password',
-      name: 'serviceRoleKey',
-      message: 'SUPABASE_SERVICE_ROLE_KEY:',
-      validate: (v) => v.trim().length > 0 ? true : 'Key ist erforderlich',
+
+  if (supabaseSetup === 'now') {
+    const { supabaseUrl } = await enquirer.prompt({
+      type: 'input',
+      name: 'supabaseUrl',
+      message: 'Supabase-Projekt URL (z.B. https://xyz.supabase.co):',
+      initial: profile?.SUPABASE_URL || '',
+      validate: (v) => {
+        if (!v?.trim()) return 'URL ist erforderlich'
+        try { new URL(v); return true } catch { return 'Bitte eine gueltige URL eingeben' }
+      },
     })
-    serviceRoleKey = prompt.serviceRoleKey
+
+    supabase = {
+      url: supabaseUrl.trim(),
+      projectRef: new URL(supabaseUrl.trim()).hostname.split(".")[0],
+    }
+
+    // Service Role Key automatisch oder manuell
+    console.log(chalk.blue("🔍 Versuche SERVICE_ROLE_KEY aus 1Password zu holen..."))
+    serviceRoleKey = await fetchServiceRoleKeyFromOnePassword(() => {})
+    
+    if (serviceRoleKey) {
+      console.log(chalk.green("✓ SERVICE_ROLE_KEY aus 1Password geholt"))
+    } else {
+      console.log(chalk.yellow("⚠️  Nicht automatisch gefunden"))
+      const prompt = await enquirer.prompt({
+        type: 'password',
+        name: 'serviceRoleKey',
+        message: 'SUPABASE_SERVICE_ROLE_KEY:',
+        validate: (v) => v?.trim().length > 0 ? true : 'Key ist erforderlich',
+      })
+      serviceRoleKey = prompt.serviceRoleKey
+    }
+  } else {
+    console.log(chalk.dim("  → Du kannst Supabase spaeter in .env.local konfigurieren"))
   }
 
-  // 4. Clerk Authentication
+  // ── 4. Clerk (Authentication) ──
   console.log(chalk.blue("\n── Clerk (Authentication) ────────────────────────"))
-  
-  const { clerkMode } = await enquirer.prompt({
+
+  const { clerkSetup } = await enquirer.prompt({
     type: 'select',
-    name: 'clerkMode',
+    name: 'clerkSetup',
     message: 'Clerk Application:',
     choices: [
-      { name: 'dedicated', message: 'Eigene Application (eigener User Pool, empfohlen)' },
-      { name: 'shared', message: 'Shared (Keys kommen spaeter via pull-env)' },
+      { name: 'dedicated', message: 'Eigene Application (Keys jetzt eingeben)' },
+      { name: 'later', message: 'Spaeter einrichten (Keys kommen via pull-env oder manuell)' },
     ],
     initial: 0,
   })
 
   let clerkKeys = null
-  if (clerkMode === 'dedicated') {
+  if (clerkSetup === 'dedicated') {
     console.log(chalk.dim("  Erstelle eine neue Application im Clerk Dashboard:"))
     console.log(chalk.dim("  https://dashboard.clerk.com → Create Application\n"))
 
-    const clerkPrompts = await enquirer.prompt([
+    clerkKeys = await enquirer.prompt([
       {
         type: 'input',
         name: 'publishableKey',
@@ -211,12 +190,13 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
         validate: (v) => v.startsWith('sk_') ? true : 'Muss mit sk_ beginnen',
       },
     ])
-    clerkKeys = clerkPrompts
+  } else {
+    console.log(chalk.dim("  → Keys werden spaeter via pnpm pull-env oder manuell eingetragen"))
   }
 
-  // 5. SpacetimeDB (UX-Core)
+  // ── 5. SpacetimeDB (UX-Core) ──
   console.log(chalk.blue("\n── SpacetimeDB (UX-Core) ─────────────────────────"))
-  
+
   const { spacetimeMode } = await enquirer.prompt({
     type: 'select',
     name: 'spacetimeMode',
@@ -224,7 +204,7 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
     choices: [
       { name: 'publish', message: `Neues Modul publizieren: ${projectName}-core` },
       { name: 'existing', message: 'Bestehendes Modul verwenden' },
-      { name: 'skip', message: 'SpacetimeDB ueberspringen' },
+      { name: 'later', message: 'Spaeter einrichten' },
     ],
     initial: 0,
   })
@@ -235,16 +215,16 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
       type: 'input',
       name: 'stdbName',
       message: 'SpacetimeDB Datenbankname:',
-      validate: (v) => v.trim().length > 0 ? true : 'Name ist erforderlich',
+      validate: (v) => v?.trim().length > 0 ? true : 'Name ist erforderlich',
     })
     spacetimeDatabase = stdbName.trim()
   } else if (spacetimeMode === 'publish') {
     spacetimeDatabase = `${projectName}-core`
   }
 
-  // 6. GitHub Repo
+  // ── 6. Projekt-Optionen ──
   console.log(chalk.blue("\n── Projekt-Optionen ──────────────────────────────"))
-  
+
   const { createGithub } = await enquirer.prompt({
     type: 'select',
     name: 'createGithub',
@@ -257,7 +237,6 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
     initial: 0,
   })
 
-  // 7. Dependencies
   const { autoInstallDeps } = await enquirer.prompt({
     type: 'confirm',
     name: 'autoInstallDeps',
@@ -265,7 +244,6 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
     initial: true,
   })
 
-  // 8. Vercel Link
   const { linkVercel } = await enquirer.prompt({
     type: 'confirm',
     name: 'linkVercel',
@@ -273,7 +251,6 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
     initial: false,
   })
 
-  // 9. Initial Commit + Push
   const { doInitialCommit } = await enquirer.prompt({
     type: 'confirm',
     name: 'doInitialCommit',
@@ -288,17 +265,23 @@ export async function runInitWizard(projectNameArg = null, projectRoot = null) {
     initial: createGithub !== 'none' && doInitialCommit,
   })
 
-  // Config-Objekt (neues Boilerplate 3.0 Schema)
+  // ── Zusammenfassung ──
+  console.log(chalk.blue("\n── Zusammenfassung ───────────────────────────────"))
+  console.log(chalk.white(`  Projekt:     ${projectName}`))
+  console.log(chalk.white(`  Supabase:    ${supabase ? supabase.projectRef : chalk.yellow('spaeter')}`))
+  console.log(chalk.white(`  Clerk:       ${clerkKeys ? 'Eigene Application' : chalk.yellow('spaeter')}`))
+  console.log(chalk.white(`  SpacetimeDB: ${spacetimeDatabase || chalk.yellow('spaeter')}`))
+  console.log(chalk.white(`  GitHub:      ${createGithub === 'none' ? 'nur lokal' : createGithub}`))
+  console.log(chalk.white(`  Vercel:      ${linkVercel ? 'ja' : 'nein'}`))
+  console.log()
+
   return {
     username: normalizedUsername,
     projectName,
     schemaName,
-    supabase: {
-      url: supabaseUrl.trim(),
-      projectRef: supabaseProjectRef,
-    },
-    serviceRoleKey: serviceRoleKey.trim(),
-    clerkMode,
+    supabase,
+    serviceRoleKey: serviceRoleKey?.trim() || null,
+    clerkSetup,
     clerkKeys,
     spacetimeMode,
     spacetimeDatabase,

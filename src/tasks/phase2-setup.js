@@ -14,8 +14,9 @@ export function createSetupTasks(config, options = {}) {
     {
       title: "Supabase-Projekt validieren",
       task: (ctx, task) => {
-        if (!config.supabase?.url || !config.supabase?.projectRef) {
-          throw new Error("Supabase-URL oder Project-Ref fehlt")
+        if (!config.supabase) {
+          task.title = "Supabase: Wird spaeter eingerichtet"
+          return
         }
         ctx.supabaseProjectRef = config.supabase.projectRef
         debug(ctx, `Supabase: ${config.supabase.projectRef}`)
@@ -26,7 +27,8 @@ export function createSetupTasks(config, options = {}) {
       title: "Service Role Key validieren",
       task: (ctx, task) => {
         if (!config.serviceRoleKey) {
-          throw new Error("Service Role Key fehlt")
+          task.title = "Service Role Key: Wird spaeter eingetragen"
+          return
         }
         ctx.serviceRoleKey = config.serviceRoleKey
         task.title = "Service Role Key vorhanden ✓"

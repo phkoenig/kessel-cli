@@ -84,8 +84,8 @@ export function createPrecheckTasks(config, options = {}) {
     {
       title: "SpacetimeDB CLI",
       task: async (ctx, task) => {
-        if (config.spacetimeMode === 'skip') {
-          task.skip("SpacetimeDB uebersprungen")
+        if (config.spacetimeMode === 'skip' || config.spacetimeMode === 'later') {
+          task.skip("SpacetimeDB wird spaeter eingerichtet")
           return
         }
         try {
@@ -105,11 +105,12 @@ export function createPrecheckTasks(config, options = {}) {
     {
       title: "Supabase-Verbindung",
       task: async (ctx, task) => {
+        if (!config.supabase?.url) {
+          task.skip("Supabase wird spaeter eingerichtet")
+          return
+        }
         try {
-          const supabaseUrl = config.supabase?.url
-          if (!supabaseUrl) { task.skip("Keine Supabase-URL"); return }
-          
-          const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+          const response = await fetch(`${config.supabase.url}/rest/v1/`, {
             method: "GET",
             headers: { apikey: "test" },
           })

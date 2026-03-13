@@ -217,6 +217,7 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
         if (dryRun) { task.title = "3/14: .env.local (DRY-RUN) ✓"; return }
         
         const appName = config.projectName.split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+        const pending = []
         
         let content = `# ${appName} - Environment Variables
 # Boilerplate 3.0: Clerk + SpacetimeDB + Supabase
@@ -224,11 +225,30 @@ export function createProjectTasks(config, ctx, projectPath, options = {}) {
 # App Config
 NEXT_PUBLIC_APP_NAME=${appName}
 NEXT_PUBLIC_TENANT_SLUG=${config.schemaName}
-
+`
+        // Supabase
+        if (config.supabase) {
+          content += `
 # Supabase (App-Datenbank)
 NEXT_PUBLIC_SUPABASE_URL=${config.supabase.url}
-SUPABASE_SERVICE_ROLE_KEY=${config.serviceRoleKey}
 `
+          if (config.serviceRoleKey) {
+            content += `SUPABASE_SERVICE_ROLE_KEY=${config.serviceRoleKey}
+`
+          } else {
+            content += `# SUPABASE_SERVICE_ROLE_KEY=  # TODO: Eintragen\n`
+            pending.push('SUPABASE_SERVICE_ROLE_KEY')
+          }
+        } else {
+          content += `
+# Supabase (App-Datenbank) - spaeter konfigurieren:
+# NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+# NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJ...
+# SUPABASE_SERVICE_ROLE_KEY=eyJ...
+`
+          pending.push('Supabase')
+        }
+
         // Clerk Keys
         if (config.clerkKeys) {
           content += `
@@ -236,6 +256,13 @@ SUPABASE_SERVICE_ROLE_KEY=${config.serviceRoleKey}
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${config.clerkKeys.publishableKey}
 CLERK_SECRET_KEY=${config.clerkKeys.secretKey}
 `
+        } else {
+          content += `
+# Clerk Authentication - spaeter konfigurieren:
+# NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+# CLERK_SECRET_KEY=sk_test_...
+`
+          pending.push('Clerk')
         }
 
         // SpacetimeDB
@@ -246,10 +273,23 @@ NEXT_PUBLIC_SPACETIMEDB_URI=${DEFAULTS.spacetimeUri}
 NEXT_PUBLIC_SPACETIMEDB_DATABASE=${config.spacetimeDatabase}
 NEXT_PUBLIC_BOILERPLATE_CORE_DRIVER=${DEFAULTS.spacetimeCoreDriver}
 `
+        } else {
+          content += `
+# SpacetimeDB (UX-Core) - spaeter konfigurieren:
+# NEXT_PUBLIC_SPACETIMEDB_URI=${DEFAULTS.spacetimeUri}
+# NEXT_PUBLIC_SPACETIMEDB_DATABASE=${config.projectName}-core
+# NEXT_PUBLIC_BOILERPLATE_CORE_DRIVER=${DEFAULTS.spacetimeCoreDriver}
+`
+          pending.push('SpacetimeDB')
         }
 
         fs.writeFileSync(path.join(finalProjectPath, ".env.local"), content)
-        task.title = "3/14: .env.local erstellt ✓"
+        
+        if (pending.length > 0) {
+          task.title = `3/14: .env.local erstellt ✓ (TODO: ${pending.join(', ')})`
+        } else {
+          task.title = "3/14: .env.local erstellt ✓"
+        }
       },
     },
 
@@ -345,6 +385,7 @@ NEXT_PUBLIC_BOILERPLATE_CORE_DRIVER=${DEFAULTS.spacetimeCoreDriver}
     {
       title: "8/14: Supabase Link",
       task: async (taskCtx, task) => {
+        if (!config.supabase) { task.skip("Supabase spaeter einrichten"); return }
         if (dryRun) { task.title = "8/14: Supabase Link (DRY-RUN) ✓"; return }
         try {
           execSync(`supabase link --project-ref ${config.supabase.projectRef}`, {
@@ -361,7 +402,7 @@ NEXT_PUBLIC_BOILERPLATE_CORE_DRIVER=${DEFAULTS.spacetimeCoreDriver}
     {
       title: "9/14: SpacetimeDB Modul publizieren",
       task: async (taskCtx, task) => {
-        if (config.spacetimeMode === 'skip') { task.skip("Uebersprungen"); return }
+        if (config.spacetimeMode === 'skip' || config.spacetimeMode === 'later') { task.skip("Spaeter einrichten"); return }
         if (config.spacetimeMode === 'existing') {
           task.title = `9/14: SpacetimeDB "${config.spacetimeDatabase}" (bestehend) ✓`
           return
@@ -385,7 +426,7 @@ NEXT_PUBLIC_BOILERPLATE_CORE_DRIVER=${DEFAULTS.spacetimeCoreDriver}
           task.title = `9/14: SpacetimeDB ⚠ (manuell: spacetime publish ${config.spacetimeDatabase})`
         }
       },
-      skip: () => config.spacetimeMode === 'skip',
+      skip: () => config.spacetimeMode === 'skip' || config.spacetimeMode === 'later',
     },
 
     // ── 10/14: MCP-Konfiguration ──
@@ -408,9 +449,11 @@ NEXT_PUBLIC_BOILERPLATE_CORE_DRIVER=${DEFAULTS.spacetimeCoreDriver}
           delete mcpConfig.mcpServers[key]
         }
         
-        mcpConfig.mcpServers[`supabase_${config.schemaName}`] = {
-          type: "http",
-          url: `https://mcp.supabase.com/mcp?project_ref=${config.supabase.projectRef}`
+        if (config.supabase?.projectRef) {
+          mcpConfig.mcpServers[`supabase_${config.schemaName}`] = {
+            type: "http",
+            url: `https://mcp.supabase.com/mcp?project_ref=${config.supabase.projectRef}`
+          }
         }
         
         fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2))
