@@ -4,6 +4,7 @@ import { spawn } from 'child_process'
 
 /**
  * Success-Komponente nach erfolgreicher Projekt-Erstellung
+ * Boilerplate 3.0: Supabase + Clerk + SpacetimeDB
  */
 export function Success({ config, ctx, projectPath }) {
   const { exit } = useApp()
@@ -12,32 +13,14 @@ export function Success({ config, ctx, projectPath }) {
   useEffect(() => {
     if (config.startDevServer && !devServerStarting) {
       setDevServerStarting(true)
-      
-      // Kurze Verzögerung damit die Success-Nachricht angezeigt wird
       const timer = setTimeout(() => {
-        // Beende ink und starte Dev-Server
         exit()
-        
-        // Starte Dev-Server im Projekt-Verzeichnis
         console.log(`\n🚀 Starte Dev-Server in ${projectPath}...\n`)
-        
         const devCmd = ctx.packageManager?.name === 'npm' ? 'npm' : 'pnpm'
-        const devProcess = spawn(devCmd, ['run', 'dev'], {
-          cwd: projectPath,
-          stdio: 'inherit',
-          shell: true,
-        })
-        
-        devProcess.on('error', (err) => {
-          console.error(`\n❌ Fehler beim Starten des Dev-Servers: ${err.message}`)
-          process.exit(1)
-        })
-        
-        devProcess.on('close', (code) => {
-          process.exit(code || 0)
-        })
+        const devProcess = spawn(devCmd, ['run', 'dev'], { cwd: projectPath, stdio: 'inherit', shell: true })
+        devProcess.on('error', (err) => { console.error(`\n❌ Fehler: ${err.message}`); process.exit(1) })
+        devProcess.on('close', (code) => { process.exit(code || 0) })
       }, 1500)
-      
       return () => clearTimeout(timer)
     }
   }, [config.startDevServer, devServerStarting, exit, projectPath, ctx.packageManager])
@@ -55,28 +38,19 @@ export function Success({ config, ctx, projectPath }) {
         </Box>
       ) : (
         <Box marginTop={1} flexDirection="column">
-          <Text color="cyan" bold>📋 Nächste Schritte:</Text>
+          <Text color="cyan" bold>📋 Naechste Schritte:</Text>
           <Text color="white">{`  1. cd ${config.projectName}`}</Text>
-          {ctx.migrationPending && (
-            <>
-              <Text color="yellow">{`  2. export SUPABASE_DB_PASSWORD=dein-password`}</Text>
-              <Text color="yellow">{`  3. pnpm db:migrate`}</Text>
-              <Text color="white">{`  4. pnpm dev`}</Text>
-            </>
-          )}
-          {!ctx.migrationPending && (
-            <Text color="white">{`  2. pnpm dev`}</Text>
-          )}
+          <Text color="white">{`  2. pnpm dev`}</Text>
           <Text color="white">{`  → http://localhost:3000`}</Text>
         </Box>
       )}
       
       <Box marginTop={1} flexDirection="column">
         <Text color="gray" bold>📝 Projekt-Details:</Text>
-        <Text color="gray">{`  Schema: ${config.schemaName}`}</Text>
-        <Text color="gray">{`  INFRA-DB: ${config.infraDb?.projectRef || 'N/A'}`}</Text>
-        <Text color="gray">{`  DEV-DB: ${config.devDb?.projectRef || 'N/A'}`}</Text>
-        {ctx.repoUrl && <Text color="gray">{`  GitHub: ${ctx.repoUrl}`}</Text>}
+        <Text color="gray">{`  Supabase:    ${config.supabase?.projectRef || 'N/A'}`}</Text>
+        <Text color="gray">{`  Clerk:       ${config.clerkMode === 'dedicated' ? 'Eigene Application' : 'Shared (pull-env)'}`}</Text>
+        <Text color="gray">{`  SpacetimeDB: ${config.spacetimeDatabase || 'uebersprungen'}`}</Text>
+        {ctx.repoUrl && <Text color="gray">{`  GitHub:      ${ctx.repoUrl}`}</Text>}
       </Box>
       
       {ctx.logFilePath && (
@@ -92,4 +66,3 @@ export function Success({ config, ctx, projectPath }) {
     </Box>
   )
 }
-
