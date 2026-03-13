@@ -12,8 +12,8 @@ function test(name, fn) {
   tests.push({ name, fn })
 }
 
-test("DEFAULT_PRESET_ID ist clerk-spacetimedb-ui", () => {
-  assert.strictEqual(DEFAULT_PRESET_ID, "clerk-spacetimedb-ui")
+test("DEFAULT_PRESET_ID ist boilerplate-3-0", () => {
+  assert.strictEqual(DEFAULT_PRESET_ID, "boilerplate-3-0")
 })
 
 test("PRESETS enthaelt clerk-spacetimedb-ui", () => {
@@ -24,12 +24,6 @@ test("PRESETS enthaelt clerk-spacetimedb-ui", () => {
   assert.ok(PRESETS["clerk-spacetimedb-ui"].requiredEnv.includes("CLERK_SECRET_KEY"))
 })
 
-test("PRESETS enthaelt legacy-Preset", () => {
-  assert.ok(PRESETS.legacy)
-  assert.strictEqual(PRESETS.legacy.id, "legacy")
-  assert.ok(PRESETS.legacy.requiredEnv.includes("SUPABASE_SERVICE_ROLE_KEY"))
-})
-
 test("clerk-spacetimedb-ui requiredEnv enthaelt Clerk und Supabase", () => {
   const preset = PRESETS["clerk-spacetimedb-ui"]
   assert.ok(preset.requiredEnv.includes("NEXT_PUBLIC_SUPABASE_URL"))
@@ -37,12 +31,16 @@ test("clerk-spacetimedb-ui requiredEnv enthaelt Clerk und Supabase", () => {
   assert.ok(preset.requiredEnv.includes("SUPABASE_SERVICE_ROLE_KEY"))
   assert.ok(preset.requiredEnv.includes("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"))
   assert.ok(preset.requiredEnv.includes("CLERK_SECRET_KEY"))
+  assert.ok(preset.requiredEnv.includes("NEXT_PUBLIC_SPACETIMEDB_URI"))
+  assert.ok(preset.requiredEnv.includes("NEXT_PUBLIC_SPACETIMEDB_DATABASE"))
+  assert.ok(preset.requiredEnv.includes("NEXT_PUBLIC_BOILERPLATE_CORE_DRIVER"))
 })
 
 test("clerk-spacetimedb-ui optionalEnv enthaelt SpacetimeDB", () => {
   const preset = PRESETS["clerk-spacetimedb-ui"]
   assert.ok(preset.optionalEnv.includes("NEXT_PUBLIC_SPACETIMEDB_ENABLED"))
   assert.ok(preset.optionalEnv.includes("CLERK_WEBHOOK_SIGNING_SECRET"))
+  assert.ok(!preset.optionalEnv.includes("NEXT_PUBLIC_SPACETIMEDB_URI"))
 })
 
 test("Preset-Resolution: Ungueltiges Preset wirft nicht", () => {

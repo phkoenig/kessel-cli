@@ -6,14 +6,14 @@ import fs6 from 'fs';
 import path4 from 'path';
 import { fileURLToPath } from 'url';
 import chalk11 from 'chalk';
-import { execSync, spawn } from 'child_process';
+import { execSync, execFileSync, spawn } from 'child_process';
 import pg from 'pg';
 import os from 'os';
 import enquirer from 'enquirer';
 import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
 import inquirer from 'inquirer';
-import { createClient } from '@supabase/supabase-js';
+import '@supabase/supabase-js';
 import { Listr } from 'listr2';
 import { Octokit } from 'octokit';
 import degit from 'degit';
@@ -189,12 +189,13 @@ function loadConfig() {
       const config = JSON.parse(fs6.readFileSync(configPath, "utf-8"));
       return {
         ...config,
-        // Legacy-Kompatibilität: defaultSupabaseUrl zeigt auf INFRA-DB (Vault)
-        defaultSupabaseUrl: config.infraDb?.url || DEFAULTS.infraDb.url,
-        // Legacy-Kompatibilität: sharedSupabaseProject = INFRA-DB
+        appDb: config.appDb || config.devDb || DEFAULTS.appDb,
+        infraDb: config.infraDb || config.appDb || config.devDb || DEFAULTS.appDb,
+        devDb: config.devDb || config.appDb || DEFAULTS.appDb,
+        defaultSupabaseUrl: config.appDb?.url || config.devDb?.url || config.infraDb?.url || DEFAULTS.appDb.url,
         sharedSupabaseProject: {
-          url: config.infraDb?.url || DEFAULTS.infraDb.url,
-          projectRef: config.infraDb?.projectRef || DEFAULTS.infraDb.projectRef
+          url: config.appDb?.url || config.devDb?.url || config.infraDb?.url || DEFAULTS.appDb.url,
+          projectRef: config.appDb?.projectRef || config.devDb?.projectRef || config.infraDb?.projectRef || DEFAULTS.appDb.projectRef
         }
       };
     } catch (error) {
@@ -203,11 +204,12 @@ function loadConfig() {
   }
   return {
     ...DEFAULTS,
-    // Legacy-Kompatibilität
-    defaultSupabaseUrl: DEFAULTS.infraDb.url,
+    infraDb: DEFAULTS.appDb,
+    devDb: DEFAULTS.appDb,
+    defaultSupabaseUrl: DEFAULTS.appDb.url,
     sharedSupabaseProject: {
-      url: DEFAULTS.infraDb.url,
-      projectRef: DEFAULTS.infraDb.projectRef
+      url: DEFAULTS.appDb.url,
+      projectRef: DEFAULTS.appDb.projectRef
     }
   };
 }
@@ -244,54 +246,139 @@ var init_config = __esm({
     __dirname$1 = path4.dirname(__filename$1);
     BOILERPLATE_ENV_PATH = resolveBoilerplateEnvPath();
     DEFAULTS = {
-      infraDb: {
-        name: "Kessel",
+      appDb: {
+        name: "App Supabase",
         url: "https://ufqlocxqizmiaozkashi.supabase.co",
         projectRef: "ufqlocxqizmiaozkashi",
-        description: "INFRA-DB: User, Auth, Vault, Multi-Tenant Schemas"
+        description: "App-DB + Storage der aktuellen Ableitung"
       },
-      devDb: {
-        name: "MEGABRAIN",
-        url: "https://jpmhwyjiuodsvjowddsm.supabase.co",
-        projectRef: "jpmhwyjiuodsvjowddsm",
-        description: "DEV-DB: App-Daten, Entwicklung"
-      },
-      defaultTemplateRepo: "phkoenig/kessel-boilerplate"
+      defaultTemplateRepo: "phkoenig/kessel-boilerplate",
+      secretsProvider: {
+        type: "1password",
+        manifestPath: "scripts/pull-env.manifest.json"
+      }
     };
     PRESETS = {
-      "clerk-spacetimedb-ui": {
-        id: "clerk-spacetimedb-ui",
-        name: "Clerk + SpacetimeDB UI (Default)",
+      "boilerplate-3-0": {
+        id: "boilerplate-3-0",
+        name: "Boilerplate 3.0 (Clerk + Spacetime + App Supabase)",
         templateRepo: "phkoenig/kessel-boilerplate",
         requiredEnv: [
           "NEXT_PUBLIC_SUPABASE_URL",
           "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+          "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
           "SUPABASE_SERVICE_ROLE_KEY",
           "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
-          "CLERK_SECRET_KEY"
+          "CLERK_SECRET_KEY",
+          "NEXT_PUBLIC_SPACETIMEDB_URI",
+          "NEXT_PUBLIC_SPACETIMEDB_DATABASE",
+          "NEXT_PUBLIC_BOILERPLATE_CORE_DRIVER",
+          "NEXT_PUBLIC_TENANT_SLUG"
         ],
         optionalEnv: [
           "CLERK_WEBHOOK_SIGNING_SECRET",
-          "NEXT_PUBLIC_SPACETIMEDB_ENABLED",
-          "NEXT_PUBLIC_SPACETIMEDB_URI",
-          "NEXT_PUBLIC_SPACETIMEDB_DATABASE"
+          "NEXT_PUBLIC_SPACETIMEDB_ENABLED"
         ],
         postSetupHooks: ["pnpm pull-env", "pnpm install"]
       },
-      legacy: {
-        id: "legacy",
-        name: "Legacy (Supabase Auth)",
+      "clerk-spacetimedb-ui": {
+        id: "clerk-spacetimedb-ui",
+        name: "Clerk + SpacetimeDB UI (Alias auf Boilerplate 3.0)",
         templateRepo: "phkoenig/kessel-boilerplate",
         requiredEnv: [
           "NEXT_PUBLIC_SUPABASE_URL",
           "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-          "SUPABASE_SERVICE_ROLE_KEY"
+          "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+          "SUPABASE_SERVICE_ROLE_KEY",
+          "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+          "CLERK_SECRET_KEY",
+          "NEXT_PUBLIC_SPACETIMEDB_URI",
+          "NEXT_PUBLIC_SPACETIMEDB_DATABASE",
+          "NEXT_PUBLIC_BOILERPLATE_CORE_DRIVER",
+          "NEXT_PUBLIC_TENANT_SLUG"
         ],
-        optionalEnv: [],
+        optionalEnv: [
+          "CLERK_WEBHOOK_SIGNING_SECRET",
+          "NEXT_PUBLIC_SPACETIMEDB_ENABLED"
+        ],
         postSetupHooks: ["pnpm pull-env", "pnpm install"]
       }
     };
-    DEFAULT_PRESET_ID = "clerk-spacetimedb-ui";
+    DEFAULT_PRESET_ID = "boilerplate-3-0";
+  }
+});
+
+// src/utils/onepassword.js
+var onepassword_exports = {};
+__export(onepassword_exports, {
+  DEFAULT_OP_VAULT: () => DEFAULT_OP_VAULT,
+  SECRET_ITEM_MAP: () => SECRET_ITEM_MAP,
+  ensureOnePasswordCli: () => ensureOnePasswordCli,
+  fetchDbPasswordFromOnePassword: () => fetchDbPasswordFromOnePassword,
+  fetchServiceRoleKeyFromOnePassword: () => fetchServiceRoleKeyFromOnePassword,
+  readSecretFromOnePassword: () => readSecretFromOnePassword
+});
+var DEFAULT_OP_VAULT, SECRET_ITEM_MAP, runOp, ensureOnePasswordCli, readSecretFromOnePassword, fetchServiceRoleKeyFromOnePassword, fetchDbPasswordFromOnePassword;
+var init_onepassword = __esm({
+  "src/utils/onepassword.js"() {
+    DEFAULT_OP_VAULT = process.env.KESSEL_OP_VAULT || "Kessel Boilerplate";
+    SECRET_ITEM_MAP = {
+      SUPABASE_SERVICE_ROLE_KEY: "App Runtime",
+      SERVICE_ROLE_KEY: "App Runtime",
+      SUPABASE_DB_PASSWORD: "App Runtime",
+      OPENROUTER_API_KEY: "AI Runtime",
+      FAL_API_KEY: "AI Runtime",
+      CLERK_SECRET_KEY: "Auth Runtime",
+      CLERK_WEBHOOK_SIGNING_SECRET: "Auth Runtime",
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "Auth Runtime",
+      NEXT_PUBLIC_SPACETIMEDB_URI: "Spacetime Runtime",
+      NEXT_PUBLIC_SPACETIMEDB_DATABASE: "Spacetime Runtime"
+    };
+    runOp = (args) => execFileSync("op", args, {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      env: process.env
+    }).trim();
+    ensureOnePasswordCli = () => {
+      try {
+        runOp(["account", "list", "--format", "json"]);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    readSecretFromOnePassword = (secretName, {
+      itemTitle = SECRET_ITEM_MAP[secretName] ?? "App Runtime",
+      vaultName = DEFAULT_OP_VAULT
+    } = {}) => runOp(["read", `op://${vaultName}/${itemTitle}/${secretName}`]);
+    fetchServiceRoleKeyFromOnePassword = async (debugFn = null) => {
+      if (!ensureOnePasswordCli()) {
+        debugFn?.("1Password CLI ist nicht angemeldet");
+        return null;
+      }
+      try {
+        debugFn?.("Lese SERVICE_ROLE_KEY aus 1Password ...");
+        const value = readSecretFromOnePassword("SERVICE_ROLE_KEY");
+        return value || null;
+      } catch (error) {
+        debugFn?.(`1Password konnte SERVICE_ROLE_KEY nicht liefern: ${error.message}`);
+        return null;
+      }
+    };
+    fetchDbPasswordFromOnePassword = async (debugFn = null) => {
+      if (!ensureOnePasswordCli()) {
+        debugFn?.("1Password CLI ist nicht angemeldet");
+        return null;
+      }
+      try {
+        debugFn?.("Lese SUPABASE_DB_PASSWORD aus 1Password ...");
+        const value = readSecretFromOnePassword("SUPABASE_DB_PASSWORD");
+        return value || null;
+      } catch (error) {
+        debugFn?.(`1Password konnte SUPABASE_DB_PASSWORD nicht liefern: ${error.message}`);
+        return null;
+      }
+    };
   }
 });
 function maskSecret(secret) {
@@ -1325,7 +1412,7 @@ async function runInitWizard(projectNameArg = null, projectRoot = null) {
   const { infraUrl } = await enquirer.prompt({
     type: "input",
     name: "infraUrl",
-    message: "INFRA-DB URL (Kessel - Auth, Vault, Multi-Tenant):",
+    message: "INFRA-DB URL (Kessel - Core/App-Supabase-Management):",
     initial: infraUrlDefault,
     validate: (value) => {
       if (!value || value.trim().length === 0) {
@@ -1359,14 +1446,14 @@ async function runInitWizard(projectNameArg = null, projectRoot = null) {
   const infraProjectRef = infraUrl ? new URL(infraUrl).hostname.split(".")[0] : null;
   let serviceRoleKey = null;
   const tempServiceRoleKey = profile?.SUPABASE_SERVICE_ROLE_KEY || profile?.SUPABASE_VAULT_SERVICE_ROLE_KEY;
-  if (tempServiceRoleKey && infraUrl) {
-    console.log(chalk11.blue("\u{1F50D} Versuche SERVICE_ROLE_KEY aus Vault zu holen..."));
-    serviceRoleKey = await fetchServiceRoleKeyFromVault(infraUrl, tempServiceRoleKey, (msg) => {
+  if (infraUrl) {
+    console.log(chalk11.blue("\u{1F50D} Versuche SERVICE_ROLE_KEY aus 1Password zu holen..."));
+    serviceRoleKey = await fetchServiceRoleKeyFromOnePassword(() => {
     });
     if (serviceRoleKey) {
-      console.log(chalk11.green("\u2713 SERVICE_ROLE_KEY aus Vault geholt"));
+      console.log(chalk11.green("\u2713 SERVICE_ROLE_KEY aus 1Password geholt"));
     } else {
-      console.log(chalk11.yellow("\u26A0\uFE0F  Vault-Zugriff fehlgeschlagen, versuche Management API..."));
+      console.log(chalk11.yellow("\u26A0\uFE0F  1Password-Zugriff fehlgeschlagen, versuche Management API..."));
     }
   }
   if (!serviceRoleKey && infraProjectRef) {
@@ -1386,7 +1473,7 @@ async function runInitWizard(projectNameArg = null, projectRoot = null) {
     const prompt = await enquirer.prompt({
       type: "password",
       name: "serviceRoleKey",
-      message: "SERVICE_ROLE_KEY (f\xFCr INFRA-DB/Vault-Zugriff):",
+      message: "SERVICE_ROLE_KEY (f\xFCr App-Supabase/Bootstrap):",
       initial: "",
       validate: (value) => {
         if (!value || value.trim().length === 0) {
@@ -1476,6 +1563,7 @@ var init_initWizard = __esm({
     init_profile();
     init_config();
     init_supabase();
+    init_onepassword();
   }
 });
 function cleanUrl(url) {
@@ -1593,7 +1681,7 @@ function Wizard({ projectNameArg, onComplete, onError }) {
   const [dbPasswordSubmitted, setDbPasswordSubmitted] = useState(false);
   const [skipDbPassword, setSkipDbPassword] = useState(false);
   const [fetchingDbPassword, setFetchingDbPassword] = useState(false);
-  const [dbPasswordFromVault, setDbPasswordFromVault] = useState(false);
+  const [dbPasswordFromOnePassword, setDbPasswordFromOnePassword] = useState(false);
   const [startDevServer, setStartDevServer] = useState(null);
   const applyProfile = async (profile, profileUsername) => {
     const { DEFAULTS: DEFAULTS2 } = await Promise.resolve().then(() => (init_config(), config_exports));
@@ -1638,28 +1726,21 @@ function Wizard({ projectNameArg, onComplete, onError }) {
   }, []);
   useEffect(() => {
     if (step === 6 && !dbPasswordSubmitted && !fetchingDbPassword && infraUrl && serviceRoleKey) {
-      const fetchFromVault = async () => {
+      const fetchFromOnePassword = async () => {
         setFetchingDbPassword(true);
         try {
-          const { fetchDbPasswordFromVault: fetchDbPasswordFromVault2 } = await Promise.resolve().then(() => (init_supabase(), supabase_exports));
-          const cleanedInfraUrl = cleanUrl(infraUrl);
-          const cleanedServiceRoleKey = serviceRoleKey.trim();
-          const vaultPassword = await fetchDbPasswordFromVault2(
-            cleanedInfraUrl,
-            cleanedServiceRoleKey,
-            null
-            // debugFn
-          );
+          const { fetchDbPasswordFromOnePassword: fetchDbPasswordFromOnePassword2 } = await Promise.resolve().then(() => (init_onepassword(), onepassword_exports));
+          const vaultPassword = await fetchDbPasswordFromOnePassword2(null);
           if (vaultPassword) {
             setDbPassword(vaultPassword);
-            setDbPasswordFromVault(true);
+            setDbPasswordFromOnePassword(true);
           }
         } catch (error) {
         } finally {
           setFetchingDbPassword(false);
         }
       };
-      fetchFromVault();
+      fetchFromOnePassword();
     }
   }, [step, dbPasswordSubmitted, fetchingDbPassword, infraUrl, serviceRoleKey]);
   const handleComplete = async (overrides = {}) => {
@@ -1780,7 +1861,7 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
     )), /* @__PURE__ */ React5.createElement(Text, { color: "gray", marginTop: 1 }, "Aktuell vorausgew\xE4hlt: ", selectedProfile?.username || "keins"));
   }
   if (step === 1) {
-    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "INFRA-DB URL (Kessel - Auth, Vault, Multi-Tenant):"), /* @__PURE__ */ React5.createElement(
+    return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "INFRA-DB URL (Kessel - Core/App-Supabase-Management):"), /* @__PURE__ */ React5.createElement(
       TextInput,
       {
         value: infraUrl,
@@ -1812,7 +1893,8 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
               setFetchingServiceRoleKey(true);
               setServiceRoleKeyStatus("Versuche SERVICE_ROLE_KEY automatisch zu holen...");
               try {
-                const { fetchServiceRoleKeyFromVault: fetchServiceRoleKeyFromVault2, fetchServiceRoleKeyFromSupabase: fetchServiceRoleKeyFromSupabase2 } = await Promise.resolve().then(() => (init_supabase(), supabase_exports));
+                const { fetchServiceRoleKeyFromSupabase: fetchServiceRoleKeyFromSupabase2 } = await Promise.resolve().then(() => (init_supabase(), supabase_exports));
+                const { fetchServiceRoleKeyFromOnePassword: fetchServiceRoleKeyFromOnePassword2 } = await Promise.resolve().then(() => (init_onepassword(), onepassword_exports));
                 const { loadExistingProfile: loadExistingProfile2 } = await Promise.resolve().then(() => (init_initWizard(), initWizard_exports));
                 const existing = await loadExistingProfile2(process.cwd());
                 const profile = existing?.profile || {};
@@ -1820,12 +1902,12 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
                 let fetchedKey = null;
                 const cleanedInfraUrlForFetch = cleanUrl(infraUrl);
                 const infraProjectRef = cleanedInfraUrlForFetch ? new URL(cleanedInfraUrlForFetch).hostname.split(".")[0] : null;
-                if (tempServiceRoleKey && infraUrl) {
-                  setServiceRoleKeyStatus("\u{1F50D} Versuche SERVICE_ROLE_KEY aus Vault zu holen...");
-                  fetchedKey = await fetchServiceRoleKeyFromVault2(infraUrl, tempServiceRoleKey, () => {
+                if (infraUrl) {
+                  setServiceRoleKeyStatus("\u{1F50D} Versuche SERVICE_ROLE_KEY aus 1Password zu holen...");
+                  fetchedKey = await fetchServiceRoleKeyFromOnePassword2(() => {
                   });
                   if (fetchedKey) {
-                    setServiceRoleKeyStatus("\u2713 SERVICE_ROLE_KEY aus Vault geholt");
+                    setServiceRoleKeyStatus("\u2713 SERVICE_ROLE_KEY aus 1Password geholt");
                     setServiceRoleKey(fetchedKey);
                     setFetchingServiceRoleKey(false);
                     setServiceRoleKeySubmitted(true);
@@ -1952,14 +2034,14 @@ Bitte den korrekten SERVICE_ROLE_KEY f\xFCr "${infraProjectRef}" verwenden.`
   }
   if (step === 6) {
     if (fetchingDbPassword) {
-      return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DB-Passwort (optional):"), /* @__PURE__ */ React5.createElement(Box, null, /* @__PURE__ */ React5.createElement(Text, { color: "yellow" }, /* @__PURE__ */ React5.createElement(Spinner2, { type: "dots" })), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, " Suche Passwort im Vault...")));
+      return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DB-Passwort (optional):"), /* @__PURE__ */ React5.createElement(Box, null, /* @__PURE__ */ React5.createElement(Text, { color: "yellow" }, /* @__PURE__ */ React5.createElement(Spinner2, { type: "dots" })), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, " Suche Passwort in 1Password...")));
     }
-    if (dbPasswordFromVault && dbPassword && !dbPasswordSubmitted) {
+    if (dbPasswordFromOnePassword && dbPassword && !dbPasswordSubmitted) {
       setTimeout(() => {
         setDbPasswordSubmitted(true);
         setStep(7);
       }, 500);
-      return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DB-Passwort (optional):"), /* @__PURE__ */ React5.createElement(Text, { color: "green" }, "\u2713 Aus Vault geladen (SUPABASE_DB_PASSWORD)"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Passwort: ", dbPassword.substring(0, 4), "*".repeat(Math.max(0, dbPassword.length - 4))), /* @__PURE__ */ React5.createElement(Text, { color: "green", marginTop: 1 }, "\u2192 Wird automatisch \xFCbernommen..."));
+      return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DB-Passwort (optional):"), /* @__PURE__ */ React5.createElement(Text, { color: "green" }, "\u2713 Aus 1Password geladen (SUPABASE_DB_PASSWORD)"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Passwort: ", dbPassword.substring(0, 4), "*".repeat(Math.max(0, dbPassword.length - 4))), /* @__PURE__ */ React5.createElement(Text, { color: "green", marginTop: 1 }, "\u2192 Wird automatisch \xFCbernommen..."));
     }
     return /* @__PURE__ */ React5.createElement(Box, { flexDirection: "column" }, /* @__PURE__ */ React5.createElement(WizardProgress, { currentStep: effectiveCurrentStep, totalSteps: effectiveTotalSteps, stepTitle: effectiveStepTitle }), /* @__PURE__ */ React5.createElement(Text, { color: "cyan", bold: true }, "DB-Passwort (optional):"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "F\xFCr automatische Schema-Konfiguration (PostgREST)"), /* @__PURE__ */ React5.createElement(Text, { color: "gray" }, "Leer lassen = sp\xE4ter manuell via Migration"), /* @__PURE__ */ React5.createElement(
       TextInput,
@@ -2305,14 +2387,6 @@ function isPnpmInstalled() {
     return false;
   }
 }
-function isNpmInstalled() {
-  try {
-    execSync("npm --version", { stdio: "pipe" });
-    return true;
-  } catch {
-    return false;
-  }
-}
 async function checkPackageManager(progressBar = null, silent = false) {
   if (!silent) {
     updateProgress(progressBar, null, "Pr\xFCfe Package Manager...");
@@ -2330,23 +2404,40 @@ async function checkPackageManager(progressBar = null, silent = false) {
       devCommand: "pnpm dev"
     };
   }
-  if (isNpmInstalled()) {
-    const version = execSync("npm --version", { encoding: "utf-8", stdio: "pipe" }).trim();
-    if (!silent) {
-      console.log(chalk11.yellow(`\u26A0\uFE0F  pnpm nicht gefunden, verwende npm (Version ${version})`));
-      console.log(chalk11.dim("   Tipp: pnpm wird empfohlen. Installiere mit: npm install -g pnpm"));
-      updateProgress(progressBar, null, "npm bereit");
-    }
-    return {
-      name: "npm",
-      command: "npm",
-      installCommand: "npm install",
-      devCommand: "npm run dev"
-    };
-  }
   throw new Error(
-    "Weder pnpm noch npm gefunden. Bitte installiere einen Package Manager:\n  - pnpm: npm install -g pnpm (empfohlen)\n  - npm: sollte mit Node.js installiert sein"
+    "pnpm wurde nicht gefunden. Dieses Projekt unterstuetzt fuer die Boilerplate-3.0-Toolchain nur pnpm."
   );
+}
+function isOnePasswordCLIInstalled() {
+  try {
+    execSync("op --version", { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function checkOnePasswordCLI(progressBar = null, silent = false) {
+  if (!silent) {
+    updateProgress(progressBar, null, "Pr\xFCfe 1Password CLI...");
+  }
+  if (!isOnePasswordCLIInstalled()) {
+    throw new Error(
+      "1Password CLI (`op`) wurde nicht gefunden. Bitte installiere sie und authentifiziere dich fuer den pull-env-Flow."
+    );
+  }
+  try {
+    execSync("op account list --format json", {
+      stdio: "pipe",
+      env: process.env
+    });
+  } catch {
+    throw new Error(
+      "1Password CLI ist installiert, aber nicht betriebsbereit. Bitte fuehre zuerst einen stabilen `op signin`-Flow aus und pruefe `op vault list`."
+    );
+  }
+  if (!silent) {
+    updateProgress(progressBar, null, "1Password CLI bereit");
+  }
 }
 function isSupabaseCLIInstalled() {
   try {
@@ -2428,6 +2519,18 @@ function createPrecheckTasks(config, options = {}) {
       skip: () => !config.linkVercel
     },
     {
+      title: "1Password CLI",
+      task: async (_ctx, task) => {
+        try {
+          await checkOnePasswordCLI(null, true);
+          task.title = "1Password CLI \u2713";
+        } catch (error) {
+          task.title = `1Password CLI \u2717 (${error.message})`;
+          throw error;
+        }
+      }
+    },
+    {
       title: "Supabase CLI",
       task: async (ctx, task) => {
         try {
@@ -2452,43 +2555,32 @@ function createPrecheckTasks(config, options = {}) {
       }
     },
     {
-      title: "INFRA-DB Verbindung",
+      title: "App-Supabase Verbindung",
       task: async (ctx, task) => {
         try {
-          const supabase = createClient(config.infraDb.url, config.serviceRoleKey, {
-            auth: {
-              autoRefreshToken: false,
-              persistSession: false
-            }
-          });
-          const response = await fetch(`${config.infraDb.url}/rest/v1/`, {
+          const appDbUrl = config.appDb?.url || config.devDb?.url || config.infraDb?.url;
+          const response = await fetch(`${appDbUrl}/rest/v1/`, {
             method: "GET",
             headers: { apikey: "test" }
           });
           if (response.status !== 401 && response.status !== 200) {
-            throw new Error(`INFRA-DB antwortet mit Status ${response.status}`);
+            throw new Error(`App-Supabase antwortet mit Status ${response.status}`);
           }
-          task.title = "INFRA-DB Verbindung \u2713";
+          task.title = "App-Supabase Verbindung \u2713";
         } catch (error) {
-          task.title = "INFRA-DB Verbindung \u2717";
+          task.title = "App-Supabase Verbindung \u2717";
           throw error;
         }
       }
     },
     {
-      title: "DEV-DB Verbindung",
+      title: "Spacetime Bootstrap",
       task: async (ctx, task) => {
         try {
-          const response = await fetch(`${config.devDb.url}/rest/v1/`, {
-            method: "GET",
-            headers: { apikey: "test" }
-          });
-          if (response.status !== 401 && response.status !== 200) {
-            throw new Error(`DEV-DB antwortet mit Status ${response.status}`);
-          }
-          task.title = "DEV-DB Verbindung \u2713";
+          const spacetimeUri = config.spacetime?.uri || process.env.NEXT_PUBLIC_SPACETIMEDB_URI || null;
+          task.title = spacetimeUri ? "Spacetime Bootstrap \u2713" : "Spacetime Bootstrap (wird via pull-env initialisiert)";
         } catch (error) {
-          task.title = "DEV-DB Verbindung \u2717";
+          task.title = "Spacetime Bootstrap \u2717";
           throw error;
         }
       }
@@ -2857,8 +2949,8 @@ function createProjectTasks(config, ctx, projectPath, options = {}) {
           task.title = "3/13: .env (DRY-RUN) \u2713";
           return;
         }
-        const envContent = `# Bootstrap-Credentials f\xFCr Vault-Zugriff (INFRA-DB)
-# WICHTIG: Dies ist die URL der INFRA-DB (Kessel) mit integriertem Vault
+        const envContent = `# Bootstrap-Credentials fuer App-Supabase und pnpm pull-env
+# WICHTIG: Diese Datei enthaelt nur den minimalen Bootstrap fuer 1Password + Supabase
 NEXT_PUBLIC_SUPABASE_URL=${config.infraDb.url}
 SERVICE_ROLE_KEY=${config.serviceRoleKey}
 `;
@@ -2884,23 +2976,23 @@ SERVICE_ROLE_KEY=${config.serviceRoleKey}
         const cleanAnonKey = ctx.anonKey.replace(/\x1b\[[0-9;]*m/g, "").replace(/\u001b\[\d+m/g, "").trim();
         const cleanServiceRoleKey = ctx.serviceRoleKey.replace(/\x1b\[[0-9;]*m/g, "").replace(/\u001b\[\d+m/g, "").trim();
         const appName = config.projectName.split(/[-_]/).map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
-        const envLocalContent = `# Public-Credentials f\xFCr Next.js Client
-# Multi-Tenant Architektur: INFRA-DB (Auth, Vault) + DEV-DB (App-Daten)
-# Tenant-Isolation erfolgt \xFCber RLS Policies basierend auf tenant_id im JWT
+        const envLocalContent = `# Public-Credentials fuer Next.js Client
+# Boilerplate 3.0: Clerk + Spacetime-Core + App-Supabase
+# Tenant-Isolation und Core-Daten laufen nicht mehr ueber einen Supabase-Vault
 
 # App-Name (wird im UI angezeigt)
 NEXT_PUBLIC_APP_NAME=${appName}
 
-# INFRA-DB (Kessel) - Auth, Vault, Multi-Tenant
+# App-Supabase Bootstrap
 NEXT_PUBLIC_SUPABASE_URL=${config.infraDb.url}
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${cleanAnonKey}
 NEXT_PUBLIC_TENANT_SLUG=${config.schemaName}
 
 # DEV-DB - App-Daten, Entwicklung
-# Hinweis: Kann gleich INFRA-DB sein oder separate DB f\xFCr fachliche Daten
+# Hinweis: Kann gleich App-Supabase sein oder separate DB fuer fachliche Daten
 NEXT_PUBLIC_DEV_SUPABASE_URL=${config.devDb.url}
 
-# Service Role Key f\xFCr Server-Side Operationen (User-Erstellung, etc.)
+# Service Role Key fuer Server-Side Operationen und pull-env-Bootstrap
 SUPABASE_SERVICE_ROLE_KEY=${cleanServiceRoleKey}
 
 # \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
@@ -2964,7 +3056,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
       skip: () => !config.autoInstallDeps
     },
     {
-      title: "7/13: Secrets aus Vault laden (pnpm pull-env)",
+      title: "7/13: Secrets aus 1Password laden (pnpm pull-env)",
       task: async (taskCtx, task) => {
         if (!config.autoInstallDeps) {
           task.skip("\xDCbersprungen (keine Dependencies installiert)");
@@ -2972,7 +3064,7 @@ NEXT_PUBLIC_AUTH_BYPASS=true
         }
         if (dryRun) {
           debug(taskCtx, `DRY-RUN: pnpm pull-env w\xFCrde ausgef\xFChrt werden`);
-          task.title = "7/13: Secrets aus Vault (DRY-RUN) \u2713";
+          task.title = "7/13: Secrets aus 1Password (DRY-RUN) \u2713";
           return;
         }
         try {
@@ -2987,13 +3079,13 @@ NEXT_PUBLIC_AUTH_BYPASS=true
               SERVICE_ROLE_KEY: ctx.serviceRoleKey
             }
           });
-          debug(taskCtx, `Secrets erfolgreich aus Vault geladen`);
-          writeLog(`Secrets aus Vault geladen (pnpm pull-env)`, "OK");
-          task.title = "7/13: Secrets aus Vault geladen \u2713";
+          debug(taskCtx, `Secrets erfolgreich aus 1Password geladen`);
+          writeLog(`Secrets aus 1Password geladen (pnpm pull-env)`, "OK");
+          task.title = "7/13: Secrets aus 1Password geladen \u2713";
         } catch (error) {
           debug(taskCtx, `pull-env Fehler: ${error.message}`);
           writeLog(`pull-env Fehler: ${error.message}`, "WARN");
-          task.title = "7/13: Secrets aus Vault \u26A0 (manuell: pnpm pull-env)";
+          task.title = "7/13: Secrets aus 1Password \u26A0 (manuell: pnpm pull-env)";
         }
       },
       skip: () => !config.autoInstallDeps
@@ -3638,323 +3730,87 @@ __export(secrets_exports, {
   registerSecretsCommands: () => registerSecretsCommands
 });
 function registerSecretsCommands(secretsCommand2) {
-  secretsCommand2.command("get").description("Ruft Secrets aus der INFRA-DB (Kessel Vault) ab").argument("[secret-name]", "Name des Secrets (optional, zeigt alle wenn nicht angegeben)").option("--json", "Ausgabe im JSON-Format").option("--env", "Ausgabe im .env-Format").option("-v, --verbose", "Detaillierte Debug-Ausgaben").action(async (secretName, options) => {
-    const verbose = options.verbose === true || process.argv.includes("--verbose") || process.argv.includes("-v");
+  secretsCommand2.command("get").description("Ruft Secrets aus dem 1Password-Vault fuer Boilerplate 3.0 ab").argument("[secret-name]", "Name des Secrets (optional, zeigt alle wenn nicht angegeben)").option("--json", "Ausgabe im JSON-Format").option("--env", "Ausgabe im .env-Format").option("--item <item-title>", "Abweichender 1Password-Item-Titel").option("--vault <vault-name>", "Abweichender 1Password-Vault").action(async (secretName, options) => {
     try {
-      debugLog("=== Secrets Get Command gestartet ===", { verbose }, verbose);
-      const config = loadConfig();
-      const serviceRoleKey = loadServiceRoleKey();
-      if (!serviceRoleKey) {
-        console.error(chalk11.red("\u274C SERVICE_ROLE_KEY nicht gefunden. Bitte konfiguriere die .env Datei."));
-        process.exit(1);
-      }
-      debugLog("SERVICE_ROLE_KEY geladen", { keyMasked: maskSecret(serviceRoleKey) }, verbose);
-      const supabase = createClient(config.defaultSupabaseUrl, serviceRoleKey, {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      });
-      debugLog("Supabase Client erstellt", null, verbose);
-      let secrets = {};
-      try {
-        debugLog("Rufe get_all_secrets_for_env() RPC-Funktion auf...", null, verbose);
-        const { data, error } = await supabase.rpc("get_all_secrets_for_env", {});
-        debugLog("RPC Response erhalten", {
-          hasData: !!data,
-          hasError: !!error
-        }, verbose);
-        if (error) {
-          debugError(error, verbose);
-          throw error;
-        }
-        secrets = data || {};
-        debugLog(`RPC erfolgreich: ${Object.keys(secrets).length} Secrets abgerufen`, null, verbose);
-      } catch (error) {
-        debugError(error, verbose);
-        if (error.message?.includes("schema cache")) {
-          console.warn(chalk11.yellow("\u26A0 Schema-Cache noch nicht aktualisiert. Verwende Fallback..."));
-          try {
-            const httpResult = await callRpcViaHttp(
-              config.defaultSupabaseUrl,
-              serviceRoleKey,
-              "get_all_secrets_for_env",
-              {},
-              verbose
-            );
-            if (httpResult.error) {
-              throw httpResult.error;
-            }
-            secrets = httpResult.data || {};
-          } catch (httpError) {
-            debugError(httpError, verbose);
-            if (secretName) {
-              try {
-                const { data, error: readError } = await supabase.rpc("read_secret", {
-                  secret_name: secretName
-                });
-                if (readError) {
-                  const httpReadResult = await callRpcViaHttp(
-                    config.defaultSupabaseUrl,
-                    serviceRoleKey,
-                    "read_secret",
-                    { secret_name: secretName },
-                    verbose
-                  );
-                  if (httpReadResult.error) {
-                    throw httpReadResult.error;
-                  }
-                  const secretValue = httpReadResult.data;
-                  outputSecret(secretName, secretValue, options);
-                  return;
-                }
-                outputSecret(secretName, data, options);
-                return;
-              } catch (readError) {
-                debugError(readError, verbose);
-                throw readError;
-              }
-            } else {
-              console.warn(chalk11.yellow("\u26A0 Versuche direkten SQL-Fallback..."));
-              const sqlResult = await getSecretsViaDirectSql(
-                config.defaultSupabaseUrl,
-                serviceRoleKey,
-                null,
-                verbose
-              );
-              if (sqlResult.error) {
-                throw sqlResult.error;
-              }
-              secrets = sqlResult.data || {};
-              if (typeof secrets === "string") {
-                secrets = JSON.parse(secrets);
-              }
-            }
-          }
-        } else {
-          throw error;
-        }
-      }
+      ensureOnePasswordCli2();
+      const vaultName = options.vault || DEFAULT_VAULT_NAME;
       if (secretName) {
-        const value = secrets[secretName];
-        if (!value) {
-          console.error(chalk11.red(`\u274C Secret "${secretName}" nicht gefunden`));
-          process.exit(1);
-        }
+        const itemTitle = options.item || getDefaultItemTitle(secretName);
+        const value = readSecret(secretName, itemTitle, vaultName);
         outputSecret(secretName, value, options);
         return;
       }
-      const entries = Object.entries(secrets).sort(([a], [b]) => a.localeCompare(b));
+      const items = listVaultItems(vaultName).sort((a, b) => a.title.localeCompare(b.title));
       if (options.json) {
-        console.log(JSON.stringify(secrets, null, 2));
-      } else if (options.env) {
-        entries.forEach(([key, value]) => console.log(`${key}=${value}`));
-      } else {
-        console.log(chalk11.cyan.bold(`
-\u{1F4CB} Secrets (${entries.length}):
-`));
-        entries.forEach(([key, value]) => {
-          const preview = value.length > 50 ? value.substring(0, 50) + "..." : value;
-          console.log(chalk11.white(`  ${key.padEnd(40)} ${chalk11.dim(preview)}`));
-        });
-        console.log();
+        console.log(JSON.stringify(items, null, 2));
+        return;
       }
+      console.log(chalk11.cyan.bold(`
+\u{1F4CB} 1Password Runtime-Items in "${vaultName}" (${items.length}):
+`));
+      items.forEach((item) => {
+        console.log(chalk11.white(`  ${item.title}`));
+      });
+      console.log();
     } catch (error) {
       console.error(chalk11.red.bold("\n\u274C Fehler beim Abrufen der Secrets:"));
-      console.error(chalk11.red(error.message));
-      debugError(error, verbose);
-      console.error(chalk11.dim("\n\u{1F4A1} Tipp: Verwende --verbose f\xFCr detaillierte Debug-Informationen"));
+      console.error(chalk11.red(error instanceof Error ? error.message : String(error)));
       process.exit(1);
     }
   });
-  secretsCommand2.command("add").description("F\xFCgt ein neues Secret zum Vault hinzu").argument("<secret-name>", "Name des Secrets").argument("<secret-value>", "Wert des Secrets").option("--force", "\xDCberschreibt existierendes Secret").option("-v, --verbose", "Detaillierte Debug-Ausgaben").action(async (secretName, secretValue, options) => {
-    const verbose = !!options.verbose;
+  secretsCommand2.command("add").description("Fuegt ein neues Secret-Feld in 1Password hinzu").argument("<secret-name>", "Name des Secrets").argument("<secret-value>", "Wert des Secrets").option("--force", "\xDCberschreibt existierendes Secret").option("--item <item-title>", "Abweichender 1Password-Item-Titel").option("--vault <vault-name>", "Abweichender 1Password-Vault").action(async (secretName, secretValue, options) => {
     try {
-      debugLog("=== Secrets Add Command gestartet ===", { secretName }, verbose);
-      const config = loadConfig();
-      const serviceRoleKey = loadServiceRoleKey();
-      if (!serviceRoleKey) {
-        console.error(chalk11.red("\u274C SERVICE_ROLE_KEY nicht gefunden."));
-        process.exit(1);
-      }
-      const supabase = createClient(config.defaultSupabaseUrl, serviceRoleKey, {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      });
+      ensureOnePasswordCli2();
+      const vaultName = options.vault || DEFAULT_VAULT_NAME;
+      const itemTitle = options.item || getDefaultItemTitle(secretName);
       if (!options.force) {
         try {
-          const { data: data2, error: error2 } = await supabase.rpc("read_secret", {
-            secret_name: secretName
-          });
-          if (!error2 && data2) {
-            console.error(chalk11.red(`\u274C Secret "${secretName}" existiert bereits`));
-            console.error(chalk11.yellow(`   Verwende --force um zu \xFCberschreiben
-`));
-            process.exit(1);
-          }
-        } catch (error2) {
+          readSecret(secretName, itemTitle, vaultName);
+          console.error(chalk11.red(`\u274C Secret "${secretName}" existiert bereits in "${itemTitle}"`));
+          console.error(chalk11.yellow("   Verwende --force, um das Feld zu aktualisieren.\n"));
+          process.exit(1);
+        } catch {
         }
       }
-      console.log(chalk11.blue(`\u{1F4DD} F\xFCge Secret "${secretName}" hinzu...`));
-      const { data, error } = await supabase.rpc("insert_secret", {
-        name: secretName,
-        secret: secretValue
-      });
-      if (error) {
-        debugError(error, verbose);
-        if (error.message?.includes("schema cache")) {
-          try {
-            const httpResult = await callRpcViaHttp(
-              config.defaultSupabaseUrl,
-              serviceRoleKey,
-              "insert_secret",
-              { name: secretName, secret: secretValue },
-              verbose
-            );
-            if (httpResult.error) {
-              throw httpResult.error;
-            }
-            console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich hinzugef\xFCgt`));
-            console.log(chalk11.dim(`  UUID: ${httpResult.data}
-`));
-            return;
-          } catch (httpError) {
-            debugError(httpError, verbose);
-            throw new Error("Schema-Cache noch nicht aktualisiert.");
-          }
-        }
-        throw error;
+      const existingItems = listVaultItems(vaultName);
+      const itemExists = existingItems.some((item) => item.title === itemTitle);
+      if (itemExists) {
+        upsertFieldInItem({ itemTitle, secretName, secretValue, vaultName });
+      } else {
+        createRuntimeItem({ itemTitle, secretName, secretValue, vaultName });
       }
-      console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich hinzugef\xFCgt`));
-      console.log(chalk11.dim(`  UUID: ${data}
+      console.log(chalk11.green(`\u2713 Secret "${secretName}" in "${itemTitle}" gespeichert
 `));
     } catch (error) {
       console.error(chalk11.red.bold("\n\u274C Fehler beim Hinzuf\xFCgen des Secrets:"));
-      console.error(chalk11.red(error.message));
-      debugError(error, verbose);
+      console.error(chalk11.red(error instanceof Error ? error.message : String(error)));
       process.exit(1);
     }
   });
-  secretsCommand2.command("update").description("Aktualisiert ein existierendes Secret").argument("<secret-name>", "Name des Secrets").argument("<secret-value>", "Neuer Wert des Secrets").option("-v, --verbose", "Detaillierte Debug-Ausgaben").action(async (secretName, secretValue, options) => {
-    const verbose = !!options.verbose;
+  secretsCommand2.command("update").description("Aktualisiert ein existierendes Secret-Feld in 1Password").argument("<secret-name>", "Name des Secrets").argument("<secret-value>", "Neuer Wert des Secrets").option("--item <item-title>", "Abweichender 1Password-Item-Titel").option("--vault <vault-name>", "Abweichender 1Password-Vault").action(async (secretName, secretValue, options) => {
     try {
-      const config = loadConfig();
-      const serviceRoleKey = loadServiceRoleKey();
-      if (!serviceRoleKey) {
-        console.error(chalk11.red("\u274C SERVICE_ROLE_KEY nicht gefunden."));
-        process.exit(1);
-      }
-      const supabase = createClient(config.defaultSupabaseUrl, serviceRoleKey, {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      });
-      console.log(chalk11.blue(`\u{1F50D} Pr\xFCfe ob Secret "${secretName}" existiert...`));
-      let existingValue = null;
-      try {
-        const { data: data2, error } = await supabase.rpc("read_secret", {
-          secret_name: secretName
-        });
-        if (error) {
-          if (error.message?.includes("not found") || error.message?.includes("does not exist")) {
-            console.error(chalk11.red(`\u274C Secret "${secretName}" existiert nicht`));
-            console.error(chalk11.yellow(`   Verwende "secrets add" um ein neues Secret hinzuzuf\xFCgen
-`));
-            process.exit(1);
-          }
-          const httpResult = await callRpcViaHttp(
-            config.defaultSupabaseUrl,
-            serviceRoleKey,
-            "read_secret",
-            { secret_name: secretName },
-            verbose
-          );
-          if (httpResult.error) {
-            throw httpResult.error;
-          }
-          existingValue = httpResult.data;
-        } else {
-          existingValue = data2;
-        }
-      } catch (error) {
-        if (error.message?.includes("not found") || error.message?.includes("does not exist")) {
-          console.error(chalk11.red(`\u274C Secret "${secretName}" existiert nicht`));
-          process.exit(1);
-        }
-        throw error;
-      }
+      ensureOnePasswordCli2();
+      const vaultName = options.vault || DEFAULT_VAULT_NAME;
+      const itemTitle = options.item || getDefaultItemTitle(secretName);
+      const existingValue = readSecret(secretName, itemTitle, vaultName);
       if (existingValue === secretValue) {
         console.log(chalk11.yellow(`\u26A0 Secret "${secretName}" hat bereits diesen Wert`));
         process.exit(0);
       }
-      console.log(chalk11.blue(`\u{1F504} Aktualisiere Secret "${secretName}"...`));
-      const { error: deleteError } = await supabase.rpc("delete_secret", {
-        secret_name: secretName
-      });
-      if (deleteError) {
-        if (deleteError.message?.includes("schema cache")) {
-          await callRpcViaHttp(
-            config.defaultSupabaseUrl,
-            serviceRoleKey,
-            "delete_secret",
-            { secret_name: secretName },
-            verbose
-          );
-        } else {
-          throw deleteError;
-        }
-      }
-      const { data, error: insertError } = await supabase.rpc("insert_secret", {
-        name: secretName,
-        secret: secretValue
-      });
-      if (insertError) {
-        if (insertError.message?.includes("schema cache")) {
-          const httpResult = await callRpcViaHttp(
-            config.defaultSupabaseUrl,
-            serviceRoleKey,
-            "insert_secret",
-            { name: secretName, secret: secretValue },
-            verbose
-          );
-          if (httpResult.error) {
-            throw httpResult.error;
-          }
-          console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich aktualisiert`));
-          console.log(chalk11.dim(`  UUID: ${httpResult.data}
-`));
-          return;
-        }
-        throw insertError;
-      }
-      console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich aktualisiert`));
-      console.log(chalk11.dim(`  UUID: ${data}
+      upsertFieldInItem({ itemTitle, secretName, secretValue, vaultName });
+      console.log(chalk11.green(`\u2713 Secret "${secretName}" in "${itemTitle}" aktualisiert
 `));
     } catch (error) {
       console.error(chalk11.red.bold("\n\u274C Fehler beim Aktualisieren des Secrets:"));
-      console.error(chalk11.red(error.message));
-      debugError(error, verbose);
+      console.error(chalk11.red(error instanceof Error ? error.message : String(error)));
       process.exit(1);
     }
   });
-  secretsCommand2.command("delete").description("L\xF6scht ein Secret aus dem Vault").argument("<secret-name>", "Name des Secrets").option("--force", "L\xF6scht ohne Best\xE4tigung").option("-v, --verbose", "Detaillierte Debug-Ausgaben").action(async (secretName, options) => {
-    const verbose = !!options.verbose;
+  secretsCommand2.command("delete").description("Loescht ein Secret-Feld aus 1Password").argument("<secret-name>", "Name des Secrets").option("--force", "L\xF6scht ohne Best\xE4tigung").option("--item <item-title>", "Abweichender 1Password-Item-Titel").option("--vault <vault-name>", "Abweichender 1Password-Vault").action(async (secretName, options) => {
     try {
-      const config = loadConfig();
-      const serviceRoleKey = loadServiceRoleKey();
-      if (!serviceRoleKey) {
-        console.error(chalk11.red("\u274C SERVICE_ROLE_KEY nicht gefunden."));
-        process.exit(1);
-      }
-      const supabase = createClient(config.defaultSupabaseUrl, serviceRoleKey, {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      });
+      ensureOnePasswordCli2();
+      const vaultName = options.vault || DEFAULT_VAULT_NAME;
+      const itemTitle = options.item || getDefaultItemTitle(secretName);
       if (!options.force) {
         const { confirm } = await inquirer.prompt([
           {
@@ -3969,54 +3825,127 @@ function registerSecretsCommands(secretsCommand2) {
           process.exit(0);
         }
       }
-      console.log(chalk11.blue(`\u{1F5D1}\uFE0F  L\xF6sche Secret "${secretName}"...`));
-      const { error } = await supabase.rpc("delete_secret", {
-        secret_name: secretName
-      });
-      if (error) {
-        debugError(error, verbose);
-        if (error.message?.includes("schema cache")) {
-          await callRpcViaHttp(
-            config.defaultSupabaseUrl,
-            serviceRoleKey,
-            "delete_secret",
-            { secret_name: secretName },
-            verbose
-          );
-          console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich gel\xF6scht
-`));
-          return;
-        }
-        if (error.message?.includes("not found") || error.message?.includes("does not exist")) {
-          console.error(chalk11.red(`\u274C Secret "${secretName}" existiert nicht`));
-          process.exit(1);
-        }
-        throw error;
+      const deleted = deleteFieldFromItem({ itemTitle, secretName, vaultName });
+      if (!deleted) {
+        console.error(chalk11.red(`\u274C Secret "${secretName}" existiert in "${itemTitle}" nicht`));
+        process.exit(1);
       }
       console.log(chalk11.green(`\u2713 Secret "${secretName}" erfolgreich gel\xF6scht
 `));
     } catch (error) {
       console.error(chalk11.red.bold("\n\u274C Fehler beim L\xF6schen des Secrets:"));
-      console.error(chalk11.red(error.message));
-      debugError(error, verbose);
+      console.error(chalk11.red(error instanceof Error ? error.message : String(error)));
       process.exit(1);
     }
   });
 }
-function outputSecret(name, value, options) {
-  if (options.json) {
-    console.log(JSON.stringify({ [name]: value }, null, 2));
-  } else if (options.env) {
-    console.log(`${name}=${value}`);
-  } else {
-    console.log(chalk11.green(`\u2713 ${name}: ${value}`));
-  }
-}
+var DEFAULT_VAULT_NAME, DEFAULT_ITEM_BY_SECRET, ensureOnePasswordCli2, runOp2, buildReference, getDefaultItemTitle, readSecret, listVaultItems, getItemJson, upsertFieldInItem, createRuntimeItem, deleteFieldFromItem, outputSecret;
 var init_secrets = __esm({
   "src/commands/secrets.js"() {
-    init_config();
-    init_debug();
-    init_supabase();
+    DEFAULT_VAULT_NAME = process.env.KESSEL_OP_VAULT || "Kessel Boilerplate";
+    DEFAULT_ITEM_BY_SECRET = {
+      SUPABASE_SERVICE_ROLE_KEY: "App Runtime",
+      SERVICE_ROLE_KEY: "App Runtime",
+      OPENROUTER_API_KEY: "AI Runtime",
+      FAL_API_KEY: "AI Runtime",
+      CLERK_SECRET_KEY: "Auth Runtime",
+      CLERK_WEBHOOK_SIGNING_SECRET: "Auth Runtime",
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "Auth Runtime",
+      NEXT_PUBLIC_SPACETIMEDB_URI: "Spacetime Runtime",
+      NEXT_PUBLIC_SPACETIMEDB_DATABASE: "Spacetime Runtime"
+    };
+    ensureOnePasswordCli2 = () => {
+      try {
+        execFileSync("op", ["account", "list", "--format", "json"], {
+          stdio: "pipe",
+          env: process.env
+        });
+      } catch {
+        throw new Error(
+          "1Password CLI ist nicht betriebsbereit. Bitte fuehre zuerst einen stabilen `op signin`-Flow aus und pruefe `op vault list`."
+        );
+      }
+    };
+    runOp2 = (args, input) => {
+      const result = execFileSync("op", args, {
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+        env: process.env,
+        input
+      });
+      return result.trim();
+    };
+    buildReference = (vaultName, itemTitle, fieldName) => `op://${vaultName}/${itemTitle}/${fieldName}`;
+    getDefaultItemTitle = (secretName) => DEFAULT_ITEM_BY_SECRET[secretName] ?? "App Runtime";
+    readSecret = (secretName, itemTitle = getDefaultItemTitle(secretName), vaultName = DEFAULT_VAULT_NAME) => runOp2(["read", buildReference(vaultName, itemTitle, secretName)]);
+    listVaultItems = (vaultName = DEFAULT_VAULT_NAME) => JSON.parse(runOp2(["item", "list", "--vault", vaultName, "--format", "json"]) || "[]");
+    getItemJson = (itemTitle, vaultName = DEFAULT_VAULT_NAME) => JSON.parse(runOp2(["item", "get", itemTitle, "--vault", vaultName, "--format", "json"]));
+    upsertFieldInItem = ({ itemTitle, secretName, secretValue, vaultName = DEFAULT_VAULT_NAME }) => {
+      const item = getItemJson(itemTitle, vaultName);
+      const fields = Array.isArray(item.fields) ? item.fields : [];
+      const fieldIndex = fields.findIndex((field) => field?.label === secretName || field?.id === secretName);
+      if (fieldIndex >= 0) {
+        fields[fieldIndex] = {
+          ...fields[fieldIndex],
+          label: secretName,
+          value: secretValue,
+          type: "CONCEALED"
+        };
+      } else {
+        fields.push({
+          id: secretName,
+          label: secretName,
+          value: secretValue,
+          type: "CONCEALED"
+        });
+      }
+      item.fields = fields;
+      runOp2(["item", "edit", item.id, "--vault", vaultName], JSON.stringify(item));
+    };
+    createRuntimeItem = ({ itemTitle, secretName, secretValue, vaultName = DEFAULT_VAULT_NAME }) => {
+      const template = {
+        title: itemTitle,
+        category: "SECURE_NOTE",
+        fields: [
+          {
+            id: "notesPlain",
+            type: "STRING",
+            purpose: "NOTES",
+            label: "notesPlain",
+            value: `${itemTitle} fuer Boilerplate 3.0`
+          },
+          {
+            id: secretName,
+            label: secretName,
+            type: "CONCEALED",
+            value: secretValue
+          }
+        ]
+      };
+      runOp2(["item", "create", "--vault", vaultName, "-"], JSON.stringify(template));
+    };
+    deleteFieldFromItem = ({ itemTitle, secretName, vaultName = DEFAULT_VAULT_NAME }) => {
+      const item = getItemJson(itemTitle, vaultName);
+      const fields = Array.isArray(item.fields) ? item.fields : [];
+      const nextFields = fields.filter((field) => field?.label !== secretName && field?.id !== secretName);
+      if (nextFields.length === fields.length) {
+        return false;
+      }
+      item.fields = nextFields;
+      runOp2(["item", "edit", item.id, "--vault", vaultName], JSON.stringify(item));
+      return true;
+    };
+    outputSecret = (name, value, options) => {
+      if (options.json) {
+        console.log(JSON.stringify({ [name]: value }, null, 2));
+        return;
+      }
+      if (options.env) {
+        console.log(`${name}=${value}`);
+        return;
+      }
+      console.log(chalk11.green(`\u2713 ${name}: ${value}`));
+    };
   }
 });
 var __filename2 = fileURLToPath(import.meta.url);
@@ -4050,7 +3979,7 @@ program.command("status").description("Zeigt Status-Dashboard f\xFCr CLI, DB, Se
   const { runStatusCommand: runStatusCommand2 } = await Promise.resolve().then(() => (init_status(), status_exports));
   await runStatusCommand2();
 });
-var secretsCommand = program.command("secrets").description("Verwaltet Secrets in der INFRA-DB (Kessel Vault)");
+var secretsCommand = program.command("secrets").description("Verwaltet Boilerplate-3.0-Secrets in 1Password");
 var { registerSecretsCommands: registerSecretsCommands2 } = await Promise.resolve().then(() => (init_secrets(), secrets_exports));
 registerSecretsCommands2(secretsCommand);
 program.parse(process.argv);

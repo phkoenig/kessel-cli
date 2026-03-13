@@ -1,435 +1,266 @@
-import { program } from "commander"
+import { execFileSync } from "child_process"
 import chalk from "chalk"
-import { createClient } from "@supabase/supabase-js"
-import { loadConfig, loadServiceRoleKey } from "../config.js"
-import { debugLog, debugError, maskSecret } from "../utils/debug.js"
-import { getSecretsViaDirectSql, callRpcViaHttp } from "../utils/supabase.js"
-import path from "path"
-import fs from "fs"
 import inquirer from "inquirer"
 
 /**
- * Secrets Commands - Verwaltet Secrets in der INFRA-DB (Kessel Vault)
+ * Secrets Commands - Verwaltet Secrets in 1Password fuer Boilerplate 3.0.
  */
+
+const DEFAULT_VAULT_NAME = process.env.KESSEL_OP_VAULT || "Kessel Boilerplate"
+
+const DEFAULT_ITEM_BY_SECRET = {
+  SUPABASE_SERVICE_ROLE_KEY: "App Runtime",
+  SERVICE_ROLE_KEY: "App Runtime",
+  OPENROUTER_API_KEY: "AI Runtime",
+  FAL_API_KEY: "AI Runtime",
+  CLERK_SECRET_KEY: "Auth Runtime",
+  CLERK_WEBHOOK_SIGNING_SECRET: "Auth Runtime",
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "Auth Runtime",
+  NEXT_PUBLIC_SPACETIMEDB_URI: "Spacetime Runtime",
+  NEXT_PUBLIC_SPACETIMEDB_DATABASE: "Spacetime Runtime",
+}
+
+const ensureOnePasswordCli = () => {
+  try {
+    execFileSync("op", ["account", "list", "--format", "json"], {
+      stdio: "pipe",
+      env: process.env,
+    })
+  } catch {
+    throw new Error(
+      "1Password CLI ist nicht betriebsbereit. Bitte fuehre zuerst einen stabilen `op signin`-Flow aus und pruefe `op vault list`."
+    )
+  }
+}
+
+const runOp = (args, input) => {
+  const result = execFileSync("op", args, {
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "pipe"],
+    env: process.env,
+    input,
+  })
+
+  return result.trim()
+}
+
+const buildReference = (vaultName, itemTitle, fieldName) => `op://${vaultName}/${itemTitle}/${fieldName}`
+
+const getDefaultItemTitle = (secretName) => DEFAULT_ITEM_BY_SECRET[secretName] ?? "App Runtime"
+
+const readSecret = (secretName, itemTitle = getDefaultItemTitle(secretName), vaultName = DEFAULT_VAULT_NAME) =>
+  runOp(["read", buildReference(vaultName, itemTitle, secretName)])
+
+const listVaultItems = (vaultName = DEFAULT_VAULT_NAME) =>
+  JSON.parse(runOp(["item", "list", "--vault", vaultName, "--format", "json"]) || "[]")
+
+const getItemJson = (itemTitle, vaultName = DEFAULT_VAULT_NAME) =>
+  JSON.parse(runOp(["item", "get", itemTitle, "--vault", vaultName, "--format", "json"]))
+
+const upsertFieldInItem = ({ itemTitle, secretName, secretValue, vaultName = DEFAULT_VAULT_NAME }) => {
+  const item = getItemJson(itemTitle, vaultName)
+  const fields = Array.isArray(item.fields) ? item.fields : []
+  const fieldIndex = fields.findIndex((field) => field?.label === secretName || field?.id === secretName)
+
+  if (fieldIndex >= 0) {
+    fields[fieldIndex] = {
+      ...fields[fieldIndex],
+      label: secretName,
+      value: secretValue,
+      type: "CONCEALED",
+    }
+  } else {
+    fields.push({
+      id: secretName,
+      label: secretName,
+      value: secretValue,
+      type: "CONCEALED",
+    })
+  }
+
+  item.fields = fields
+  runOp(["item", "edit", item.id, "--vault", vaultName], JSON.stringify(item))
+}
+
+const createRuntimeItem = ({ itemTitle, secretName, secretValue, vaultName = DEFAULT_VAULT_NAME }) => {
+  const template = {
+    title: itemTitle,
+    category: "SECURE_NOTE",
+    fields: [
+      {
+        id: "notesPlain",
+        type: "STRING",
+        purpose: "NOTES",
+        label: "notesPlain",
+        value: `${itemTitle} fuer Boilerplate 3.0`,
+      },
+      {
+        id: secretName,
+        label: secretName,
+        type: "CONCEALED",
+        value: secretValue,
+      },
+    ],
+  }
+
+  runOp(["item", "create", "--vault", vaultName, "-"], JSON.stringify(template))
+}
+
+const deleteFieldFromItem = ({ itemTitle, secretName, vaultName = DEFAULT_VAULT_NAME }) => {
+  const item = getItemJson(itemTitle, vaultName)
+  const fields = Array.isArray(item.fields) ? item.fields : []
+  const nextFields = fields.filter((field) => field?.label !== secretName && field?.id !== secretName)
+
+  if (nextFields.length === fields.length) {
+    return false
+  }
+
+  item.fields = nextFields
+  runOp(["item", "edit", item.id, "--vault", vaultName], JSON.stringify(item))
+  return true
+}
+
+const outputSecret = (name, value, options) => {
+  if (options.json) {
+    console.log(JSON.stringify({ [name]: value }, null, 2))
+    return
+  }
+
+  if (options.env) {
+    console.log(`${name}=${value}`)
+    return
+  }
+
+  console.log(chalk.green(`✓ ${name}: ${value}`))
+}
 
 /**
  * Registriert alle Secrets-Subcommands
  * @param {Object} secretsCommand - Commander Command-Instanz
  */
 export function registerSecretsCommands(secretsCommand) {
-  // Get Secrets Command
   secretsCommand
     .command("get")
-    .description("Ruft Secrets aus der INFRA-DB (Kessel Vault) ab")
+    .description("Ruft Secrets aus dem 1Password-Vault fuer Boilerplate 3.0 ab")
     .argument("[secret-name]", "Name des Secrets (optional, zeigt alle wenn nicht angegeben)")
     .option("--json", "Ausgabe im JSON-Format")
     .option("--env", "Ausgabe im .env-Format")
-    .option("-v, --verbose", "Detaillierte Debug-Ausgaben")
+    .option("--item <item-title>", "Abweichender 1Password-Item-Titel")
+    .option("--vault <vault-name>", "Abweichender 1Password-Vault")
     .action(async (secretName, options) => {
-      const verbose = options.verbose === true || process.argv.includes('--verbose') || process.argv.includes('-v')
-      
       try {
-        debugLog("=== Secrets Get Command gestartet ===", { verbose }, verbose)
-        
-        const config = loadConfig()
-        const serviceRoleKey = loadServiceRoleKey()
-        
-        if (!serviceRoleKey) {
-          console.error(chalk.red("❌ SERVICE_ROLE_KEY nicht gefunden. Bitte konfiguriere die .env Datei."))
-          process.exit(1)
-        }
-        
-        debugLog("SERVICE_ROLE_KEY geladen", { keyMasked: maskSecret(serviceRoleKey) }, verbose)
+        ensureOnePasswordCli()
+        const vaultName = options.vault || DEFAULT_VAULT_NAME
 
-        const supabase = createClient(config.defaultSupabaseUrl, serviceRoleKey, {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false
-          }
-        })
-        
-        debugLog("Supabase Client erstellt", null, verbose)
-
-        // Versuche RPC-Funktion zu verwenden
-        let secrets = {}
-        try {
-          debugLog("Rufe get_all_secrets_for_env() RPC-Funktion auf...", null, verbose)
-          const { data, error } = await supabase.rpc("get_all_secrets_for_env", {})
-          
-          debugLog("RPC Response erhalten", {
-            hasData: !!data,
-            hasError: !!error,
-          }, verbose)
-          
-          if (error) {
-            debugError(error, verbose)
-            throw error
-          }
-          
-          secrets = data || {}
-          debugLog(`RPC erfolgreich: ${Object.keys(secrets).length} Secrets abgerufen`, null, verbose)
-        } catch (error) {
-          debugError(error, verbose)
-          
-          if (error.message?.includes("schema cache")) {
-            console.warn(chalk.yellow("⚠ Schema-Cache noch nicht aktualisiert. Verwende Fallback..."))
-            
-            try {
-              const httpResult = await callRpcViaHttp(
-                config.defaultSupabaseUrl,
-                serviceRoleKey,
-                "get_all_secrets_for_env",
-                {},
-                verbose
-              )
-              
-              if (httpResult.error) {
-                throw httpResult.error
-              }
-              
-              secrets = httpResult.data || {}
-            } catch (httpError) {
-              debugError(httpError, verbose)
-              
-              if (secretName) {
-                // Fallback für einzelnes Secret
-                try {
-                  const { data, error: readError } = await supabase.rpc("read_secret", {
-                    secret_name: secretName
-                  })
-                  
-                  if (readError) {
-                    const httpReadResult = await callRpcViaHttp(
-                      config.defaultSupabaseUrl,
-                      serviceRoleKey,
-                      "read_secret",
-                      { secret_name: secretName },
-                      verbose
-                    )
-                    
-                    if (httpReadResult.error) {
-                      throw httpReadResult.error
-                    }
-                    
-                    const secretValue = httpReadResult.data
-                    outputSecret(secretName, secretValue, options)
-                    return
-                  }
-                  
-                  outputSecret(secretName, data, options)
-                  return
-                } catch (readError) {
-                  debugError(readError, verbose)
-                  throw readError
-                }
-              } else {
-                // Finaler Fallback: Direkter SQL-Zugriff
-                console.warn(chalk.yellow("⚠ Versuche direkten SQL-Fallback..."))
-                const sqlResult = await getSecretsViaDirectSql(
-                  config.defaultSupabaseUrl,
-                  serviceRoleKey,
-                  null,
-                  verbose
-                )
-                
-                if (sqlResult.error) {
-                  throw sqlResult.error
-                }
-                
-                secrets = sqlResult.data || {}
-                if (typeof secrets === 'string') {
-                  secrets = JSON.parse(secrets)
-                }
-              }
-            }
-          } else {
-            throw error
-          }
-        }
-
-        // Einzelnes Secret
         if (secretName) {
-          const value = secrets[secretName]
-          if (!value) {
-            console.error(chalk.red(`❌ Secret "${secretName}" nicht gefunden`))
-            process.exit(1)
-          }
+          const itemTitle = options.item || getDefaultItemTitle(secretName)
+          const value = readSecret(secretName, itemTitle, vaultName)
           outputSecret(secretName, value, options)
           return
         }
 
-        // Alle Secrets
-        const entries = Object.entries(secrets).sort(([a], [b]) => a.localeCompare(b))
+        const items = listVaultItems(vaultName).sort((a, b) => a.title.localeCompare(b.title))
 
         if (options.json) {
-          console.log(JSON.stringify(secrets, null, 2))
-        } else if (options.env) {
-          entries.forEach(([key, value]) => console.log(`${key}=${value}`))
-        } else {
-          console.log(chalk.cyan.bold(`\n📋 Secrets (${entries.length}):\n`))
-          entries.forEach(([key, value]) => {
-            const preview = value.length > 50 ? value.substring(0, 50) + "..." : value
-            console.log(chalk.white(`  ${key.padEnd(40)} ${chalk.dim(preview)}`))
-          })
-          console.log()
+          console.log(JSON.stringify(items, null, 2))
+          return
         }
+
+        console.log(chalk.cyan.bold(`\n📋 1Password Runtime-Items in "${vaultName}" (${items.length}):\n`))
+        items.forEach((item) => {
+          console.log(chalk.white(`  ${item.title}`))
+        })
+        console.log()
       } catch (error) {
         console.error(chalk.red.bold("\n❌ Fehler beim Abrufen der Secrets:"))
-        console.error(chalk.red(error.message))
-        debugError(error, verbose)
-        console.error(chalk.dim("\n💡 Tipp: Verwende --verbose für detaillierte Debug-Informationen"))
+        console.error(chalk.red(error instanceof Error ? error.message : String(error)))
         process.exit(1)
       }
     })
 
-  // Add Secret Command
   secretsCommand
     .command("add")
-    .description("Fügt ein neues Secret zum Vault hinzu")
+    .description("Fuegt ein neues Secret-Feld in 1Password hinzu")
     .argument("<secret-name>", "Name des Secrets")
     .argument("<secret-value>", "Wert des Secrets")
     .option("--force", "Überschreibt existierendes Secret")
-    .option("-v, --verbose", "Detaillierte Debug-Ausgaben")
+    .option("--item <item-title>", "Abweichender 1Password-Item-Titel")
+    .option("--vault <vault-name>", "Abweichender 1Password-Vault")
     .action(async (secretName, secretValue, options) => {
-      const verbose = !!options.verbose
-      
       try {
-        debugLog("=== Secrets Add Command gestartet ===", { secretName }, verbose)
-        
-        const config = loadConfig()
-        const serviceRoleKey = loadServiceRoleKey()
-        
-        if (!serviceRoleKey) {
-          console.error(chalk.red("❌ SERVICE_ROLE_KEY nicht gefunden."))
-          process.exit(1)
-        }
+        ensureOnePasswordCli()
+        const vaultName = options.vault || DEFAULT_VAULT_NAME
+        const itemTitle = options.item || getDefaultItemTitle(secretName)
 
-        const supabase = createClient(config.defaultSupabaseUrl, serviceRoleKey, {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false
-          }
-        })
-
-        // Prüfe ob Secret existiert
         if (!options.force) {
           try {
-            const { data, error } = await supabase.rpc("read_secret", {
-              secret_name: secretName
-            })
-            
-            if (!error && data) {
-              console.error(chalk.red(`❌ Secret "${secretName}" existiert bereits`))
-              console.error(chalk.yellow(`   Verwende --force um zu überschreiben\n`))
-              process.exit(1)
-            }
-          } catch (error) {
-            // Secret existiert nicht, weiter
+            readSecret(secretName, itemTitle, vaultName)
+            console.error(chalk.red(`❌ Secret "${secretName}" existiert bereits in "${itemTitle}"`))
+            console.error(chalk.yellow("   Verwende --force, um das Feld zu aktualisieren.\n"))
+            process.exit(1)
+          } catch {
+            // Feld existiert noch nicht
           }
         }
 
-        console.log(chalk.blue(`📝 Füge Secret "${secretName}" hinzu...`))
+        const existingItems = listVaultItems(vaultName)
+        const itemExists = existingItems.some((item) => item.title === itemTitle)
 
-        const { data, error } = await supabase.rpc("insert_secret", {
-          name: secretName,
-          secret: secretValue
-        })
-
-        if (error) {
-          debugError(error, verbose)
-          
-          if (error.message?.includes("schema cache")) {
-            try {
-              const httpResult = await callRpcViaHttp(
-                config.defaultSupabaseUrl,
-                serviceRoleKey,
-                "insert_secret",
-                { name: secretName, secret: secretValue },
-                verbose
-              )
-              
-              if (httpResult.error) {
-                throw httpResult.error
-              }
-              
-              console.log(chalk.green(`✓ Secret "${secretName}" erfolgreich hinzugefügt`))
-              console.log(chalk.dim(`  UUID: ${httpResult.data}\n`))
-              return
-            } catch (httpError) {
-              debugError(httpError, verbose)
-              throw new Error("Schema-Cache noch nicht aktualisiert.")
-            }
-          }
-          throw error
+        if (itemExists) {
+          upsertFieldInItem({ itemTitle, secretName, secretValue, vaultName })
+        } else {
+          createRuntimeItem({ itemTitle, secretName, secretValue, vaultName })
         }
 
-        console.log(chalk.green(`✓ Secret "${secretName}" erfolgreich hinzugefügt`))
-        console.log(chalk.dim(`  UUID: ${data}\n`))
+        console.log(chalk.green(`✓ Secret "${secretName}" in "${itemTitle}" gespeichert\n`))
       } catch (error) {
         console.error(chalk.red.bold("\n❌ Fehler beim Hinzufügen des Secrets:"))
-        console.error(chalk.red(error.message))
-        debugError(error, verbose)
+        console.error(chalk.red(error instanceof Error ? error.message : String(error)))
         process.exit(1)
       }
     })
 
-  // Update Secret Command
   secretsCommand
     .command("update")
-    .description("Aktualisiert ein existierendes Secret")
+    .description("Aktualisiert ein existierendes Secret-Feld in 1Password")
     .argument("<secret-name>", "Name des Secrets")
     .argument("<secret-value>", "Neuer Wert des Secrets")
-    .option("-v, --verbose", "Detaillierte Debug-Ausgaben")
+    .option("--item <item-title>", "Abweichender 1Password-Item-Titel")
+    .option("--vault <vault-name>", "Abweichender 1Password-Vault")
     .action(async (secretName, secretValue, options) => {
-      const verbose = !!options.verbose
-      
       try {
-        const config = loadConfig()
-        const serviceRoleKey = loadServiceRoleKey()
-        
-        if (!serviceRoleKey) {
-          console.error(chalk.red("❌ SERVICE_ROLE_KEY nicht gefunden."))
-          process.exit(1)
-        }
-
-        const supabase = createClient(config.defaultSupabaseUrl, serviceRoleKey, {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false
-          }
-        })
-
-        // Prüfe ob Secret existiert
-        console.log(chalk.blue(`🔍 Prüfe ob Secret "${secretName}" existiert...`))
-
-        let existingValue = null
-        try {
-          const { data, error } = await supabase.rpc("read_secret", {
-            secret_name: secretName
-          })
-          
-          if (error) {
-            if (error.message?.includes("not found") || error.message?.includes("does not exist")) {
-              console.error(chalk.red(`❌ Secret "${secretName}" existiert nicht`))
-              console.error(chalk.yellow(`   Verwende "secrets add" um ein neues Secret hinzuzufügen\n`))
-              process.exit(1)
-            }
-            
-            // HTTP-Fallback
-            const httpResult = await callRpcViaHttp(
-              config.defaultSupabaseUrl,
-              serviceRoleKey,
-              "read_secret",
-              { secret_name: secretName },
-              verbose
-            )
-            
-            if (httpResult.error) {
-              throw httpResult.error
-            }
-            
-            existingValue = httpResult.data
-          } else {
-            existingValue = data
-          }
-        } catch (error) {
-          if (error.message?.includes("not found") || error.message?.includes("does not exist")) {
-            console.error(chalk.red(`❌ Secret "${secretName}" existiert nicht`))
-            process.exit(1)
-          }
-          throw error
-        }
+        ensureOnePasswordCli()
+        const vaultName = options.vault || DEFAULT_VAULT_NAME
+        const itemTitle = options.item || getDefaultItemTitle(secretName)
+        const existingValue = readSecret(secretName, itemTitle, vaultName)
 
         if (existingValue === secretValue) {
           console.log(chalk.yellow(`⚠ Secret "${secretName}" hat bereits diesen Wert`))
           process.exit(0)
         }
 
-        // Lösche altes Secret und erstelle neues
-        console.log(chalk.blue(`🔄 Aktualisiere Secret "${secretName}"...`))
-
-        const { error: deleteError } = await supabase.rpc("delete_secret", {
-          secret_name: secretName
-        })
-
-        if (deleteError) {
-          if (deleteError.message?.includes("schema cache")) {
-            await callRpcViaHttp(
-              config.defaultSupabaseUrl,
-              serviceRoleKey,
-              "delete_secret",
-              { secret_name: secretName },
-              verbose
-            )
-          } else {
-            throw deleteError
-          }
-        }
-
-        // Erstelle neues Secret
-        const { data, error: insertError } = await supabase.rpc("insert_secret", {
-          name: secretName,
-          secret: secretValue
-        })
-
-        if (insertError) {
-          if (insertError.message?.includes("schema cache")) {
-            const httpResult = await callRpcViaHttp(
-              config.defaultSupabaseUrl,
-              serviceRoleKey,
-              "insert_secret",
-              { name: secretName, secret: secretValue },
-              verbose
-            )
-            
-            if (httpResult.error) {
-              throw httpResult.error
-            }
-            
-            console.log(chalk.green(`✓ Secret "${secretName}" erfolgreich aktualisiert`))
-            console.log(chalk.dim(`  UUID: ${httpResult.data}\n`))
-            return
-          }
-          throw insertError
-        }
-
-        console.log(chalk.green(`✓ Secret "${secretName}" erfolgreich aktualisiert`))
-        console.log(chalk.dim(`  UUID: ${data}\n`))
+        upsertFieldInItem({ itemTitle, secretName, secretValue, vaultName })
+        console.log(chalk.green(`✓ Secret "${secretName}" in "${itemTitle}" aktualisiert\n`))
       } catch (error) {
         console.error(chalk.red.bold("\n❌ Fehler beim Aktualisieren des Secrets:"))
-        console.error(chalk.red(error.message))
-        debugError(error, verbose)
+        console.error(chalk.red(error instanceof Error ? error.message : String(error)))
         process.exit(1)
       }
     })
 
-  // Delete Secret Command
   secretsCommand
     .command("delete")
-    .description("Löscht ein Secret aus dem Vault")
+    .description("Loescht ein Secret-Feld aus 1Password")
     .argument("<secret-name>", "Name des Secrets")
     .option("--force", "Löscht ohne Bestätigung")
-    .option("-v, --verbose", "Detaillierte Debug-Ausgaben")
+    .option("--item <item-title>", "Abweichender 1Password-Item-Titel")
+    .option("--vault <vault-name>", "Abweichender 1Password-Vault")
     .action(async (secretName, options) => {
-      const verbose = !!options.verbose
-      
       try {
-        const config = loadConfig()
-        const serviceRoleKey = loadServiceRoleKey()
-        
-        if (!serviceRoleKey) {
-          console.error(chalk.red("❌ SERVICE_ROLE_KEY nicht gefunden."))
-          process.exit(1)
-        }
+        ensureOnePasswordCli()
+        const vaultName = options.vault || DEFAULT_VAULT_NAME
+        const itemTitle = options.item || getDefaultItemTitle(secretName)
 
-        const supabase = createClient(config.defaultSupabaseUrl, serviceRoleKey, {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false
-          }
-        })
-
-        // Bestätigung
         if (!options.force) {
           const { confirm } = await inquirer.prompt([
             {
@@ -446,55 +277,17 @@ export function registerSecretsCommands(secretsCommand) {
           }
         }
 
-        console.log(chalk.blue(`🗑️  Lösche Secret "${secretName}"...`))
-
-        const { error } = await supabase.rpc("delete_secret", {
-          secret_name: secretName
-        })
-
-        if (error) {
-          debugError(error, verbose)
-          
-          if (error.message?.includes("schema cache")) {
-            await callRpcViaHttp(
-              config.defaultSupabaseUrl,
-              serviceRoleKey,
-              "delete_secret",
-              { secret_name: secretName },
-              verbose
-            )
-            
-            console.log(chalk.green(`✓ Secret "${secretName}" erfolgreich gelöscht\n`))
-            return
-          }
-          
-          if (error.message?.includes("not found") || error.message?.includes("does not exist")) {
-            console.error(chalk.red(`❌ Secret "${secretName}" existiert nicht`))
-            process.exit(1)
-          }
-          
-          throw error
+        const deleted = deleteFieldFromItem({ itemTitle, secretName, vaultName })
+        if (!deleted) {
+          console.error(chalk.red(`❌ Secret "${secretName}" existiert in "${itemTitle}" nicht`))
+          process.exit(1)
         }
 
         console.log(chalk.green(`✓ Secret "${secretName}" erfolgreich gelöscht\n`))
       } catch (error) {
         console.error(chalk.red.bold("\n❌ Fehler beim Löschen des Secrets:"))
-        console.error(chalk.red(error.message))
-        debugError(error, verbose)
+        console.error(chalk.red(error instanceof Error ? error.message : String(error)))
         process.exit(1)
       }
     })
-}
-
-/**
- * Helper: Gibt ein Secret aus
- */
-function outputSecret(name, value, options) {
-  if (options.json) {
-    console.log(JSON.stringify({ [name]: value }, null, 2))
-  } else if (options.env) {
-    console.log(`${name}=${value}`)
-  } else {
-    console.log(chalk.green(`✓ ${name}: ${value}`))
-  }
 }

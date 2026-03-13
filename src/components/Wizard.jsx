@@ -208,7 +208,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   const [dbPasswordSubmitted, setDbPasswordSubmitted] = useState(false)
   const [skipDbPassword, setSkipDbPassword] = useState(false)
   const [fetchingDbPassword, setFetchingDbPassword] = useState(false)
-  const [dbPasswordFromVault, setDbPasswordFromVault] = useState(false)
+  const [dbPasswordFromOnePassword, setDbPasswordFromOnePassword] = useState(false)
 
   // Dev-Server starten
   const [startDevServer, setStartDevServer] = useState(null)
@@ -270,34 +270,28 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     initProfiles()
   }, [])
 
-  // Versuche DB-Passwort aus Vault zu laden wenn Step 6 erreicht wird
+  // Versuche DB-Passwort aus 1Password zu laden wenn Step 6 erreicht wird
   useEffect(() => {
     if (step === 6 && !dbPasswordSubmitted && !fetchingDbPassword && infraUrl && serviceRoleKey) {
-      const fetchFromVault = async () => {
+      const fetchFromOnePassword = async () => {
         setFetchingDbPassword(true)
         try {
-          const { fetchDbPasswordFromVault } = await import('../utils/supabase.js')
-          const cleanedInfraUrl = cleanUrl(infraUrl)
-          const cleanedServiceRoleKey = serviceRoleKey.trim()
+          const { fetchDbPasswordFromOnePassword } = await import('../utils/onepassword.js')
           
-          const vaultPassword = await fetchDbPasswordFromVault(
-            cleanedInfraUrl,
-            cleanedServiceRoleKey,
-            null // debugFn
-          )
+          const vaultPassword = await fetchDbPasswordFromOnePassword(null)
           
           if (vaultPassword) {
             setDbPassword(vaultPassword)
-            setDbPasswordFromVault(true)
+            setDbPasswordFromOnePassword(true)
           }
         } catch (error) {
-          // Vault-Zugriff fehlgeschlagen - ignorieren, User kann manuell eingeben
+          // 1Password-Zugriff fehlgeschlagen - ignorieren, User kann manuell eingeben
         } finally {
           setFetchingDbPassword(false)
         }
       }
       
-      fetchFromVault()
+      fetchFromOnePassword()
     }
   }, [step, dbPasswordSubmitted, fetchingDbPassword, infraUrl, serviceRoleKey])
 
@@ -469,7 +463,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
     return (
       <Box flexDirection="column">
         <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
-        <Text color="cyan" bold>INFRA-DB URL (Kessel - Auth, Vault, Multi-Tenant):</Text>
+        <Text color="cyan" bold>INFRA-DB URL (Kessel - Core/App-Supabase-Management):</Text>
         <TextInput
           value={infraUrl}
           onChange={setInfraUrl}
@@ -508,7 +502,8 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
                 setServiceRoleKeyStatus('Versuche SERVICE_ROLE_KEY automatisch zu holen...')
                 
                 try {
-                  const { fetchServiceRoleKeyFromVault, fetchServiceRoleKeyFromSupabase } = await import('../utils/supabase.js')
+                  const { fetchServiceRoleKeyFromSupabase } = await import('../utils/supabase.js')
+                  const { fetchServiceRoleKeyFromOnePassword } = await import('../utils/onepassword.js')
                   const { loadExistingProfile } = await import('../wizard/initWizard.js')
                   
                   const existing = await loadExistingProfile(process.cwd())
@@ -519,13 +514,13 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
                   const cleanedInfraUrlForFetch = cleanUrl(infraUrl)
                   const infraProjectRef = cleanedInfraUrlForFetch ? new URL(cleanedInfraUrlForFetch).hostname.split(".")[0] : null
                   
-                  // Versuche 1: Aus Vault holen
-                  if (tempServiceRoleKey && infraUrl) {
-                    setServiceRoleKeyStatus('🔍 Versuche SERVICE_ROLE_KEY aus Vault zu holen...')
-                    fetchedKey = await fetchServiceRoleKeyFromVault(infraUrl, tempServiceRoleKey, () => {})
+                  // Versuche 1: Aus 1Password holen
+                  if (infraUrl) {
+                    setServiceRoleKeyStatus('🔍 Versuche SERVICE_ROLE_KEY aus 1Password zu holen...')
+                    fetchedKey = await fetchServiceRoleKeyFromOnePassword(() => {})
                     
                     if (fetchedKey) {
-                      setServiceRoleKeyStatus('✓ SERVICE_ROLE_KEY aus Vault geholt')
+                      setServiceRoleKeyStatus('✓ SERVICE_ROLE_KEY aus 1Password geholt')
                       setServiceRoleKey(fetchedKey)
                       setFetchingServiceRoleKey(false)
                       setServiceRoleKeySubmitted(true)
@@ -716,7 +711,7 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
   if (step === 6) {
     // Optionaler DB-Passwort Step für automatische Schema-Konfiguration
     
-    // Zeige Spinner während Vault-Lookup
+    // Zeige Spinner waehrend 1Password-Lookup
     if (fetchingDbPassword) {
       return (
         <Box flexDirection="column">
@@ -724,14 +719,14 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
           <Text color="cyan" bold>DB-Passwort (optional):</Text>
           <Box>
             <Text color="yellow"><Spinner type="dots" /></Text>
-            <Text color="gray"> Suche Passwort im Vault...</Text>
+            <Text color="gray"> Suche Passwort in 1Password...</Text>
           </Box>
         </Box>
       )
     }
     
-    // Wenn Passwort aus Vault geladen wurde: Automatisch übernehmen und weitermachen
-    if (dbPasswordFromVault && dbPassword && !dbPasswordSubmitted) {
+    // Wenn Passwort aus 1Password geladen wurde: Automatisch uebernehmen und weitermachen
+    if (dbPasswordFromOnePassword && dbPassword && !dbPasswordSubmitted) {
       // Auto-advance nach kurzer Anzeige
       setTimeout(() => {
         setDbPasswordSubmitted(true)
@@ -742,14 +737,14 @@ export function Wizard({ projectNameArg, onComplete, onError }) {
         <Box flexDirection="column">
           <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />
           <Text color="cyan" bold>DB-Passwort (optional):</Text>
-          <Text color="green">✓ Aus Vault geladen (SUPABASE_DB_PASSWORD)</Text>
+          <Text color="green">✓ Aus 1Password geladen (SUPABASE_DB_PASSWORD)</Text>
           <Text color="gray">Passwort: {dbPassword.substring(0, 4)}{'*'.repeat(Math.max(0, dbPassword.length - 4))}</Text>
           <Text color="green" marginTop={1}>→ Wird automatisch übernommen...</Text>
         </Box>
       )
     }
     
-    // Manuelle Eingabe (nur wenn kein Vault-Passwort)
+    // Manuelle Eingabe (nur wenn kein 1Password-Passwort)
     return (
       <Box flexDirection="column">
         <WizardProgress currentStep={effectiveCurrentStep} totalSteps={effectiveTotalSteps} stepTitle={effectiveStepTitle} />

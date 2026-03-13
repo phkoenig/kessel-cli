@@ -66,7 +66,7 @@ program
 // Secrets Commands
 const secretsCommand = program
   .command("secrets")
-  .description("Verwaltet Secrets in der INFRA-DB (Kessel Vault)")
+  .description("Verwaltet Boilerplate-3.0-Secrets in 1Password")
 
 // Registriere Secrets-Subcommands
 const { registerSecretsCommands } = await import("./commands/secrets.js")

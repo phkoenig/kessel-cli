@@ -41,57 +41,68 @@ export const BOILERPLATE_ENV_PATH = resolveBoilerplateEnvPath()
 
 // Default-Werte
 export const DEFAULTS = {
-  infraDb: {
-    name: "Kessel",
+  appDb: {
+    name: "App Supabase",
     url: "https://ufqlocxqizmiaozkashi.supabase.co",
     projectRef: "ufqlocxqizmiaozkashi",
-    description: "INFRA-DB: User, Auth, Vault, Multi-Tenant Schemas",
-  },
-  devDb: {
-    name: "MEGABRAIN",
-    url: "https://jpmhwyjiuodsvjowddsm.supabase.co",
-    projectRef: "jpmhwyjiuodsvjowddsm",
-    description: "DEV-DB: App-Daten, Entwicklung",
+    description: "App-DB + Storage der aktuellen Ableitung",
   },
   defaultTemplateRepo: "phkoenig/kessel-boilerplate",
+  secretsProvider: {
+    type: "1password",
+    manifestPath: "scripts/pull-env.manifest.json",
+  },
 }
 
 /** Presets fuer Template-Stacks (Phase 7: Clerk + SpacetimeDB) */
 export const PRESETS = {
-  "clerk-spacetimedb-ui": {
-    id: "clerk-spacetimedb-ui",
-    name: "Clerk + SpacetimeDB UI (Default)",
+  "boilerplate-3-0": {
+    id: "boilerplate-3-0",
+    name: "Boilerplate 3.0 (Clerk + Spacetime + App Supabase)",
     templateRepo: "phkoenig/kessel-boilerplate",
     requiredEnv: [
       "NEXT_PUBLIC_SUPABASE_URL",
       "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
       "SUPABASE_SERVICE_ROLE_KEY",
       "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
       "CLERK_SECRET_KEY",
+      "NEXT_PUBLIC_SPACETIMEDB_URI",
+      "NEXT_PUBLIC_SPACETIMEDB_DATABASE",
+      "NEXT_PUBLIC_BOILERPLATE_CORE_DRIVER",
+      "NEXT_PUBLIC_TENANT_SLUG",
     ],
     optionalEnv: [
       "CLERK_WEBHOOK_SIGNING_SECRET",
       "NEXT_PUBLIC_SPACETIMEDB_ENABLED",
-      "NEXT_PUBLIC_SPACETIMEDB_URI",
-      "NEXT_PUBLIC_SPACETIMEDB_DATABASE",
     ],
     postSetupHooks: ["pnpm pull-env", "pnpm install"],
   },
-  legacy: {
-    id: "legacy",
-    name: "Legacy (Supabase Auth)",
+  "clerk-spacetimedb-ui": {
+    id: "clerk-spacetimedb-ui",
+    name: "Clerk + SpacetimeDB UI (Alias auf Boilerplate 3.0)",
     templateRepo: "phkoenig/kessel-boilerplate",
     requiredEnv: [
       "NEXT_PUBLIC_SUPABASE_URL",
       "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
       "SUPABASE_SERVICE_ROLE_KEY",
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+      "CLERK_SECRET_KEY",
+      "NEXT_PUBLIC_SPACETIMEDB_URI",
+      "NEXT_PUBLIC_SPACETIMEDB_DATABASE",
+      "NEXT_PUBLIC_BOILERPLATE_CORE_DRIVER",
+      "NEXT_PUBLIC_TENANT_SLUG",
     ],
-    optionalEnv: [],
+    optionalEnv: [
+      "CLERK_WEBHOOK_SIGNING_SECRET",
+      "NEXT_PUBLIC_SPACETIMEDB_ENABLED",
+    ],
     postSetupHooks: ["pnpm pull-env", "pnpm install"],
   },
 }
 
-export const DEFAULT_PRESET_ID = "clerk-spacetimedb-ui"
+export const DEFAULT_PRESET_ID = "boilerplate-3-0"
 
 /**
  * Lade Config-Datei (falls vorhanden)
@@ -105,12 +116,19 @@ export function loadConfig() {
       // Füge Kompatibilitäts-Properties hinzu
       return {
         ...config,
-        // Legacy-Kompatibilität: defaultSupabaseUrl zeigt auf INFRA-DB (Vault)
-        defaultSupabaseUrl: config.infraDb?.url || DEFAULTS.infraDb.url,
-        // Legacy-Kompatibilität: sharedSupabaseProject = INFRA-DB
+        appDb: config.appDb || config.devDb || DEFAULTS.appDb,
+        infraDb: config.infraDb || config.appDb || config.devDb || DEFAULTS.appDb,
+        devDb: config.devDb || config.appDb || DEFAULTS.appDb,
+        defaultSupabaseUrl:
+          config.appDb?.url || config.devDb?.url || config.infraDb?.url || DEFAULTS.appDb.url,
         sharedSupabaseProject: {
-          url: config.infraDb?.url || DEFAULTS.infraDb.url,
-          projectRef: config.infraDb?.projectRef || DEFAULTS.infraDb.projectRef,
+          url:
+            config.appDb?.url || config.devDb?.url || config.infraDb?.url || DEFAULTS.appDb.url,
+          projectRef:
+            config.appDb?.projectRef ||
+            config.devDb?.projectRef ||
+            config.infraDb?.projectRef ||
+            DEFAULTS.appDb.projectRef,
         },
       }
     } catch (error) {
@@ -120,11 +138,12 @@ export function loadConfig() {
   // Defaults: INFRA-DB = Kessel, DEV-DB = MEGABRAIN
   return {
     ...DEFAULTS,
-    // Legacy-Kompatibilität
-    defaultSupabaseUrl: DEFAULTS.infraDb.url,
+    infraDb: DEFAULTS.appDb,
+    devDb: DEFAULTS.appDb,
+    defaultSupabaseUrl: DEFAULTS.appDb.url,
     sharedSupabaseProject: {
-      url: DEFAULTS.infraDb.url,
-      projectRef: DEFAULTS.infraDb.projectRef,
+      url: DEFAULTS.appDb.url,
+      projectRef: DEFAULTS.appDb.projectRef,
     },
   }
 }
